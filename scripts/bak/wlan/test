@@ -1,0 +1,39 @@
+#!/bin/bash
+
+CERT_INCLUDE_DIR=${1}
+. ${CERT_INCLUDE_DIR}/config.inc
+. ${CERT_INCLUDE_DIR}/ifm-common.inc
+
+test_state=${CERT_TEST_STATUS_HOME}/${2}_test.run
+echo 0 > ${test_state}
+
+function func_test-WB() {
+    while [ 1 ]; do
+        nmcli connection up ${wlan_nmcli_WF_con}
+        if [[ $? -eq 0 ]]; then
+            timeout 5 ping -c 5 ${wlan_ap} -i ${wlan_test_ping_ival} > /dev/null 2>&1
+            if [[ $? -eq 0 ]]; then
+                echo 1 > "${test_state}"
+            else
+                echo 0 > "${test_state}"
+            fi
+        else
+            echo 0 > "${test_state}"
+        fi
+        nmcli connection down ${wlan_nmcli_WF_con}
+        sleep 1
+    done
+}
+
+function func_test-WB_AP() {
+	nmcli connection up ${wlan_nmcli_HS_con}
+    echo 1 > ${test_state}
+}
+
+#set -x
+lsmod | grep -q moal || modprobe moal
+if [[ "${wb_test_role}" == "AP" ]] ; then
+	func_test-WB_AP
+else
+	func_test-WB
+fi

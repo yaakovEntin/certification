@@ -1,0 +1,11 @@
+#!/bin/bash
+
+CERT_HOME=/opt/Certification/scripts
+AUTOSTART=${CERT_HOME}/cert/.autostart
+TEST_LAUNCH=${CERT_HOME}/cert/test.launch
+
+[[ -f ${AUTOSTART} ]] || exit 2
+
+[[ ! -z ${delay} ]] && sleep ${delay}
+
+export CERT_HOME ; ${TEST_LAUNCH} &

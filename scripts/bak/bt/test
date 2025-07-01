@@ -1,0 +1,47 @@
+#!/bin/bash
+
+CERT_INCLUDE_DIR=${1}
+. ${CERT_INCLUDE_DIR}/config.inc
+
+bt_test_run=${CERT_TEST_STATUS_HOME}/${2}_test.run
+echo 0 > ${bt_test_run}
+
+bt_test_role=tx
+#bt_test_role=rx
+
+bt_root_dir=${CERT_TEST_OUTPUT}
+
+bt_config() {
+	modprobe -r ${BT_KO}
+	sleep ${bt_test_sleep}
+}
+
+function bt_obex_tx() {
+	while [[ 1 ]] ; do
+		if [[ ! -d /sys/class/bluetooth/${bt_iface} ]] ; then
+			modprobe -r ${BT_KO}
+		fi
+		echo 1 > ${bt_test_run}
+		sleep ${bt_test_sleep}
+	done
+}
+
+function bt_obex_rx() {
+	# RX side: nothing to do - obex service is responsible for receiving file
+	while [[ 1 ]] ; do
+		echo 1 > ${bt_test_run}
+		sleep ${bt_test_sleep}
+	done
+}
+
+function bt_run_test() {
+	if [[ "${bt_test_role}" == "tx" ]] ; then
+		bt_obex_tx
+	else
+		bt_obex_rx
+	fi
+}
+
+set -x
+bt_config
+bt_run_test

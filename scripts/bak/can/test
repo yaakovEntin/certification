@@ -1,0 +1,42 @@
+#!/bin/bash
+
+CERT_INCLUDE_DIR=${1}
+. ${CERT_INCLUDE_DIR}/config.inc
+
+can_test_run=${CERT_TEST_STATUS_HOME}/${2}_test.run
+echo 0 > ${can_test_run}
+
+can_config() {
+	# Set bitrate, enable interface
+	for iface in ${can_tx} ${can_rx}
+	do
+		while [ ! -d /sys/class/net/can${iface} ] ; do
+			sleep 4
+		done
+		ip link set can${iface} down
+		ip link set can${iface} type can bitrate ${can_bitrate}
+		sleep 0.25
+		ip link set can${iface} up
+	done
+}
+
+can_server() {
+	# Nothing to do
+	#:
+	candump any,0:0,#FFFFFFFF -s ${can_silent_mode}
+}
+
+can_client() {
+	# Start CAN frames generator
+	while [ 1 ]
+	do
+		can_config
+		echo 1 > ${can_test_run}
+		cangen -g 50 -e -D r -v can${can_tx} &> /dev/null
+		echo 0 > ${can_test_run}
+		sleep 1.3
+	done
+}
+
+set -x
+can_client

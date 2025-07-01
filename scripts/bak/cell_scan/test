@@ -1,0 +1,112 @@
+#!/bin/bash
+
+CERT_INCLUDE_DIR=${1}
+. ${CERT_INCLUDE_DIR}/config.inc
+. ${CERT_INCLUDE_DIR}/modem.inc
+
+cell_test_run=${CERT_TEST_STATUS_HOME}/${2}_test.run
+echo 0 > ${cell_test_run}
+
+at_test_output=${CERT_TEST_OUTPUT}/${2}_test.out
+modem_name=cell_modem
+at_modem="${!modem_name}"
+
+AT_RESET="AT+CFUN=1,1"
+AT_SCAN_NET="AT+COPS=?"
+AT_GET_ICCID="AT+CICCID"
+AT_QSIMSTAT="AT+QSIMSTAT?"
+
+function Wait_until_modem_detected() {
+    while [ ! -c ${cell_modem} ]; do
+        echo 0 > ${cell_test_run}
+        sleep ${cell_test_sleep};
+    done
+}
+
+function reset_modem() {
+    echo "=== Reset Modem ==="
+    gpioset ${cell_rst_gpio_chip} ${cell_rst_gpio}=1
+    sleep ${cell_test_sim_timeout}
+    gpioset ${cell_rst_gpio_chip} ${cell_rst_gpio}=0
+}
+
+function wait_for_sim() {
+    local sim_det=${1:-0}
+    while [ 1 ]; do
+        local ret=1
+        : > ${at_test_output}
+        for ((i=1; i<${REPEATS}; i++)); do
+            sleep ${cell_test_sim_timeout}
+            modem_query_at_port ${AT_GET_ICCID} 1
+            if [[ $? -eq 0 ]]; then
+                ret=0
+                break
+            fi
+        done
+        : > ${at_test_output}
+        if [[ ${ret} -ne 0 ]]; then
+            echo 0 > ${cell_test_run}
+            echo "=== SIM NOT Detected ==="
+            if [[ -z ${sim_det} || ${sim_det} -ne 1 ]] ; then
+                # SIM card hot-swap detection disabled: run reset command
+                reset_modem
+                continue
+            else
+                # SIM card hot-swap detection enabled: do not reset modem, just wait for SIM insertion
+                continue
+            fi
+        else
+            # SIM detected: return 0
+            echo "=== SIM Detected ==="
+            return 0
+        fi
+    done
+}
+
+function scan_networks() {
+    local y=0
+    : > ${at_test_output}
+    Wait_until_modem_detected
+    echo -e "${AT_SCAN_NET}\r" > ${cell_modem}
+    timeout ${cell_test_scan_timeout} cat ${cell_modem} > ${at_test_output} &
+    local pid=$!
+    echo -n " ### [ ${y} ] Cell Operators Scan ... "
+    for i in $(seq 0 ${cell_test_scan_timeout}); do
+        sleep 1; # echo -n $i" ";
+        if [[ $(grep -c "OK" ${at_test_output}) -gt 0 ]]; then
+            kill -9 ${pid} > /dev/null
+            break
+        fi
+    done
+    y=$((y + 1))
+    : > ${at_test_output}
+}
+
+function main() {
+    local scenario=${1:-"SIM"}
+    while [ 1 ]; do
+        Wait_until_modem_detected
+		initialize_the_modem_TTY_device
+        wait_for_sim ${sim_detect}
+        if [[ ${scenario} == "SIM" ]] ; then # SIM found
+            # Cell test scenario is SIM detection only
+            echo 1 > ${cell_test_run}
+            sleep ${cell_test_sleep}
+            continue
+        fi
+        sleep 2 # rest between AT commands otherwise
+        if [[ ${scenario} == "SCAN" ]] ; then
+            scan_networks
+            echo 1 > ${cell_test_run}
+            sleep ${cell_test_sleep}
+            continue
+        fi
+    done
+}
+
+#set -x
+if [[ "${wb_test_role}" == "DUT" ]] ; then
+    main SCAN # SIM
+else
+    echo 1 > ${cell_test_run}
+fi

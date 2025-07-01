@@ -1,0 +1,102 @@
+#!/bin/bash
+
+#trap "rm -rf \${0}" EXIT INT TERM
+
+CERT_INCLUDE_DIR=${1}
+. ${CERT_INCLUDE_DIR}/config.inc
+
+test_run=${CERT_TEST_STATUS_HOME}/${2}_test.run
+test_out=${CERT_TEST_OUTPUT}/${2}_test.out
+echo 0 > ${test_run}
+
+declare -a AT_TEST=(
+		"${AT_GET_IMEI}"
+		"${AT_GET_ModId}"
+		"${AT_GET_FwId}"
+)
+
+while [ ! -c ${at_modem} ]; do
+	echo 0 > ${test_run}
+	sleep 10;
+done
+
+READ_PID=
+#############################################################################
+# The tty configuration is stored in the MODEM_TTY_CFG global variable
+#############################################################################
+function Init_AT_modem_TTY() {
+    modem_id=$(lsusb | grep -i Qualcomm | awk '{print $6}' | head -n1)
+    if [ "$modem_id" == "$SIM7200G_ID" ]; then
+        at_modem="/dev/ttyUSB2"
+    elif [ "$modem_id" == "$SIM7672G_ID" ]; then
+        at_modem="/dev/ttyACM2"
+    else
+        execute "lsusb"
+        exit 1
+    fi
+#    systemctl stop ModemManager # to unblock using AT
+    if [[ ! -c  ${at_modem} ]]; then
+        bad_msg "Cellular modem: test failed: TTY device not found"
+        return 1;
+    fi
+    # Configure a Modem TTY device
+    stty -F ${at_modem} ${at_modem_speed} ${at_modem_opts}
+    sleep ${at_test_modem_timeout}
+    return 0;
+}
+
+function spawn_reading_modem_output_process_to_file() {
+	cat ${at_modem} > ${test_out} &
+	READ_PID=$!
+	sleep ${at_test_modem_timeout}
+}
+
+function write_at_cmd_to_modem_tty_device() { # (str at_cmd)
+	local AT_COMMAND=${1:-$AT_DEFAULT_CMD}
+	echo -e "${AT_COMMAND}\r" > ${at_modem}
+	sleep ${at_test_modem_timeout}
+}
+
+function check_modem_status() {
+	local __retval=$1
+	local local_retval=0
+	# Check output file
+	ret=`grep -c "OK" ${test_out}`
+	if [[ $ret -eq 0 ]]; then
+		local_retval=1
+	fi
+	# Propagate the return value to the external variable
+	eval $__retval="'$local_retval'"
+}
+
+#############################################################################
+# int modem_query_at_port(str at_cmd) - sends generic AT command to the modem
+# @at_cmd: AT command; If not set the func sends 'AT" test command
+# The command output is written to a temp file which name is stored in
+# It's a caller responsibility to parse the output file for any data of interest.
+# Returns 0 in case of success, 1 otherwise
+#############################################################################
+function modem_query_at_port() {
+	local AT_COMMAND=${1:-$AT_DEFAULT_CMD}
+	local ret
+	spawn_reading_modem_output_process_to_file
+	write_at_cmd_to_modem_tty_device $AT_COMMAND
+	kill -9 ${READ_PID}
+	check_modem_status ret
+	return $ret;
+}
+
+while [ 1 ]; do
+	Init_AT_modem_TTY
+	for at_cmd in ${AT_TEST[@]} ; do
+		modem_query_at_port ${at_cmd}
+		if [[ $? -ne 0 ]]; then
+			echo 0 > ${test_run}
+			exit 1;
+		fi
+		echo 1 > ${test_run}
+	done
+	counter=$((counter+1))
+done
+
+#set +x

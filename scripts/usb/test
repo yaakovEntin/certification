@@ -1,0 +1,36 @@
+#!/bin/bash
+
+CERT_INCLUDE_DIR=${1}
+. ${CERT_INCLUDE_DIR}/config.inc
+. ${CERT_INCLUDE_DIR}/ifm-common.inc
+
+usb_test_run=${CERT_TEST_STATUS_HOME}/${2}_test.run
+echo 0 > ${usb_test_run}
+
+usb_dev="/dev/sda"
+
+function test_usb() {
+while [ 1 ] ; do
+    sleep "${usb_sleep:-2}"
+    if [[ -b "$usb_dev" && "$(readlink -f /sys/block/$(basename "$usb_dev")/device)" == *usb* ]]; then
+        if timeout 5 dd if="$usb_dev" of=/tmp/usb_test.bin bs=1K count=100 iflag=direct &>/dev/null; then
+            echo 1 > "$usb_test_run"
+        else
+            echo 0 > "$usb_test_run"
+        fi
+    else
+        echo 0 > "$usb_test_run"
+        echo "USB device not present — attempting rebind"
+        echo '2-1' > /sys/bus/usb/drivers/usb/unbind
+        sleep 2
+        echo '2-1' > /sys/bus/usb/drivers/usb/bind
+    fi
+done
+}
+
+#set -x
+if [[ "${wb_test_role}" == "DUT" ]] ; then
+    test_usb
+else
+    echo 1 > ${usb_test_run}
+fi

@@ -1,0 +1,66 @@
+#!/bin/bash
+
+CERT_INCLUDE_DIR=${1}
+. ${CERT_INCLUDE_DIR}/config.inc
+. ${CERT_INCLUDE_DIR}/modem.inc
+
+cell_test_run=${CERT_TEST_STATUS_HOME}/${2}_test.run
+echo 0 > ${cell_test_run}
+
+at_test_output=${CERT_TEST_OUTPUT}/${2}_test.out
+modem_name=cell_modem
+at_modem="${!modem_name}"
+
+function Wait_until_modem_detected() {
+    while [ ! -c ${cell_modem} ]; do
+        echo 0 > ${cell_test_run}
+        sleep ${cell_test_sleep};
+    done
+}
+
+function reset_modem() {
+    gpioset ${cell_rst_gpio_chip} ${cell_rst_gpio}=1
+    sleep ${cell_test_sim_timeout}
+    gpioset ${cell_rst_gpio_chip} ${cell_rst_gpio}=0
+}
+
+function wait_for_modem_alive() {
+    while [ 1 ]; do
+        local ret=1
+        : > ${at_test_output}
+        for ((i=1; i<${REPEATS}; i++)); do
+            sleep ${cell_test_sim_timeout}
+            modem_query_at_port "AT" 1
+            if [[ $? -eq 0 ]]; then
+                ret=0
+                break
+            fi
+        done
+        : > ${at_test_output}
+        if [[ ${ret} -ne 0 ]]; then
+            echo 0 > ${cell_test_run}
+            reset_modem
+            continue
+        else
+            return 0
+        fi
+    done
+}
+
+function main() {
+    while [ 1 ]; do
+        Wait_until_modem_detected
+        initialize_the_modem_TTY_device
+        wait_for_modem_alive
+        echo 1 > ${cell_test_run}
+        sleep ${cell_test_sleep}
+        continue
+    done
+}
+
+#set -x
+if [[ "${wb_test_role}" == "DUT" ]] ; then
+    main
+else
+    echo 1 > ${cell_test_run}
+fi

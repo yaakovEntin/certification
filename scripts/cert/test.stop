@@ -1,0 +1,15 @@
+#!/bin/bash
+
+killall test.launch 2>/dev/null
+killall test 2>/dev/null
+killall iperf 2>/dev/null
+killall iperf3 2>/dev/null
+killall ping 2>/dev/null
+killall cat 2>/dev/null
+#killall dioset 2>/dev/null
+#killall dioget 2>/dev/null
+killall cangen 2>/dev/null
+killall candump 2>/dev/null
+killall obexd 2>/dev/null
+killall sleep 2>/dev/null
+#shutdown -c 2>/dev/null

@@ -1,0 +1,13 @@
+#!/bin/bash
+
+CERT_INCLUDE_DIR=${1}
+. ${CERT_INCLUDE_DIR}/config.inc
+. ${CERT_INCLUDE_DIR}/ifm-common.inc
+
+wlan_test_run=${CERT_TEST_STATUS_HOME}/${2}_test.run
+
+ip link set wlan0 down 2>/dev/null
+ip link set uap0 down 2>/dev/null
+ip link set wfd0 down 2>/dev/null
+modprobe -r moal
+echo 1 > ${wlan_test_run}

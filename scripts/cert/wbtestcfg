@@ -1,0 +1,49 @@
+#!/bin/bash
+
+CERT_HOME=/opt/Certification/scripts
+BACKUP_HOME=${CERT_HOME}/bak
+B_SHORT_TST=bt
+B_FULL_TST=bluetooth
+W_SHORT_TST=wifi
+W_FULL_TST=wlan
+
+SHORT_test="BT/WiFi: Short Test"
+FULL_test="BT/WiFi: Full Test"
+
+
+
+function set_wb_test_SHORT() {
+	mv ${CERT_HOME}/${B_FULL_TST} ${BACKUP_HOME} &> /dev/null
+	mv ${CERT_HOME}/${W_FULL_TST} ${BACKUP_HOME} &> /dev/null
+	mv ${BACKUP_HOME}/${B_SHORT_TST} ${CERT_HOME} &> /dev/null
+	mv ${BACKUP_HOME}/${W_SHORT_TST} ${CERT_HOME} &> /dev/null
+}
+
+function set_wb_test_FULL() {
+	mv ${CERT_HOME}/${B_SHORT_TST} ${BACKUP_HOME} &> /dev/null
+	mv ${CERT_HOME}/${W_SHORT_TST} ${BACKUP_HOME} &> /dev/null
+	mv ${BACKUP_HOME}/${B_FULL_TST} ${CERT_HOME} &> /dev/null
+	mv ${BACKUP_HOME}/${W_FULL_TST} ${CERT_HOME} &> /dev/null
+}
+
+function wb_test_cfg() {
+	PS3="Select Action: "
+	select t in "${SHORT_test}" "${FULL_test}"; do
+		case ${t} in
+		'')
+			echo Select a correct Action from the list >&2
+			continue
+			;;
+		"${SHORT_test}")
+			set_wb_test_SHORT
+			break
+			;;
+		"${FULL_test}")
+			set_wb_test_FULL
+			break
+			;;
+		esac
+	done
+}
+
+wb_test_cfg

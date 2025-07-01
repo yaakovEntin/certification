@@ -1,0 +1,7 @@
+#!/bin/bash
+
+CERT_INCLUDE_DIR=${1}
+. ${CERT_INCLUDE_DIR}/config.inc
+
+bt_test_run=${CERT_TEST_STATUS_HOME}/${2}_test.run
+echo 1 > ${bt_test_run}

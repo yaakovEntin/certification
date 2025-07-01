@@ -1,0 +1,47 @@
+#!/bin/bash
+
+CERT_INCLUDE_DIR=${1}
+. ${CERT_INCLUDE_DIR}/config.inc
+
+bt_test_run=${CERT_TEST_STATUS_HOME}/${2}_test.run
+echo 0 > ${bt_test_run}
+
+bt_root_dir=${CERT_TEST_OUTPUT}
+
+bt_config() {
+	while [ ! -d /sys/class/bluetooth/${bt_iface} ] # Wait until bt interface is created
+	do
+		echo 0 > ${bt_test_run}
+		sleep 2
+	done
+
+	[[ -d ${bt_root_dir} ]] || mkdir -p ${bt_root_dir}
+	sleep ${bt_test_sleep}
+	systemctl --user restart obex.service
+	sleep ${bt_test_sleep}
+}
+
+function bt_obex_tx() {
+	while [[ 1 ]] ; do
+		bt-obex -p ${BT_RX_MAC} ${bt_test_file_src} &> /dev/null
+		if [[ $? -eq 0 ]] ; then
+			echo 1 > ${bt_test_run}
+		else
+			echo 0 > ${bt_test_run}
+        fi
+		sleep ${bt_test_sleep}
+	done
+}
+
+function bt_run_test() {
+    if [[ "${wb_test_role}" == "DUT" ]] ; then
+		bt_obex_tx
+	else
+        echo 1 > ${bt_test_run}
+        bt-obex -s /tmp/
+	fi
+}
+
+#set -x
+bt_config
+bt_run_test

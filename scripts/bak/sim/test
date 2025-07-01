@@ -1,0 +1,11 @@
+#!/bin/bash
+
+CERT_INCLUDE_DIR=${1}
+. ${CERT_INCLUDE_DIR}/config.inc
+. ${CERT_INCLUDE_DIR}/modem.inc
+. ${CERT_INCLUDE_DIR}/cell.inc
+
+cell_scenario=SIM
+#cell_scenario=SCAN
+
+main ${cell_scenario}
