@@ -8,39 +8,41 @@ echo 0 > ${dio_test_run}
 
 function dio_test() {
 	declare -a DIO_ARR=( "21 5" "17 12" "16 4")
-# pin | in           | out             | connection
-# --- | ------------ | --------------  |
-# 2   | gpioget 0 16 -- gpioset 0 4=0  | inter
-# 3   | gpioget 0 17 \/ gpioset 0 5=0  | cross with pin 4
-# 4   | gpioget 0 21 /\ gpioset 0 12=0 | cross with pin 3
+	# pin | in           | out             | connection
+	# --- | ------------ | --------------  |
+	# 2   | gpioget 0 16 -- gpioset 0 4=0  | inter
+	# 3   | gpioget 0 17 \/ gpioset 0 5=0  | cross with pin 4
+	# 4   | gpioget 0 21 /\ gpioset 0 12=0 | cross with pin 3
 	declare -a VAL_ARR=(0 1)
 	local get_val=0
 	local errcode=0
-    for pair in "${DIO_ARR[@]}" ; do
-        read din dout <<< "$pair"
+	for pair in "${DIO_ARR[@]}" ; do
+		read din dout <<< "$pair"
 		for set_val in ${VAL_ARR[@]} ; do
-            gpioset 0 ${dout}=${set_val}
-            get_val=$(gpioget 0 ${din})
+			gpioset 0 ${dout}=${set_val}
+			get_val=$(gpioget 0 ${din})
 			if [[ ${set_val} -eq ${get_val} ]]; then # condition is inverted as the design
 				(( errcode |= 1 ))
+			else
+				sleep 1
 			fi
 		done
-        gpioget 0 ${dout} > /dev/null # out pin is intra connected to in pin,
-        # set its direction to input to not collide with the cross connected out
+		gpioget 0 ${dout} > /dev/null # out pin is intra connected to in pin,
+		# set its direction to input to not collide with the cross connected out
 	done
 	return ${errcode}
 }
 
 function dio_loop_test() {
 	while [ 1 ] ; do
-        dio_test
-        echo $(( $? ^ 1 )) > "${dio_test_run}"
-        sleep 2
+		dio_test
+		echo $(( $? ^ 1 )) > "${dio_test_run}"
+		sleep 2
 	done
 }
 
 if [[ "${wb_test_role}" == "DUT" ]] ; then
-    dio_loop_test
+	dio_loop_test
 else
-    echo 1 > ${dio_test_run}
+	echo 1 > ${dio_test_run}
 fi

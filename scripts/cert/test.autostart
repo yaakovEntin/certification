@@ -1,6 +1,6 @@
 #!/bin/bash
 
-CERT_HOME=/opt/Certification/scripts
+CERT_HOME=/opt/certification/scripts
 AUTOSTART=${CERT_HOME}/cert/.autostart
 TEST_LAUNCH=${CERT_HOME}/cert/test.launch
 

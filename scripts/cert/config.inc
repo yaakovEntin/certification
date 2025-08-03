@@ -6,14 +6,15 @@ if [[ -v $DEBUG ]] ; then
     trap 'echo "Error: $BASH_SOURCE +$LINENO: command [$BASH_COMMAND] failed with exit code $?" >&2' ERR
 fi
 # Common defines
-CERT_HOME=/opt/Certification/scripts
+CERT=/opt/certification
+CERT_HOME=${CERT}/scripts
 CERT_INCLUDE_DIR=${CERT_HOME}/cert
 CERT_TEST_STATUS_HOME=/tmp/Certification/run
 CERT_TEST_OUTPUT=/tmp/Certification/tmp
 CERT_LOG_HOME=/tmp/Certification/log
 TIMESTAMP_FORMAT="%Y%m%d_%H%M%S"
 UTIL_HOME=/usr/local/bin
-MISC_HOME=/opt/Certification/misc
+MISC_HOME=${CERT}/misc
 INSMOD_HOME=${MISC_HOME}/kernel
 [[ $(hostname) == iot-link ]] && wb_test_role="DUT" || wb_test_role="AP"
 
