@@ -5,7 +5,9 @@ There are 3 seconds pause between each sequence
 
 note that it takes about a 1.5 min for the modem to find networks, until then it will be red.
 # setup repo
-on DUT run:
+* install Debian to the DUT:
+https://mediawiki.compulab.com/w/index.php?title=IOT-LINK:_Debian_Linux:_Installation 
+* on DUT run:
 ```
 sudo -i
 cd /opt
@@ -30,7 +32,7 @@ vi /etc/passwd # must have this line for the user to Set UIO=GID=0 :
 ```
 `compulab:x:0:0::/home/compulab:/bin/bash`
 hard reset 
-# Setup for tests:
+# Setup up for specific tests:
 ## Bluetooth :
 on DUT and AP:
 ```
