@@ -13,6 +13,7 @@ sudo -i
 cd /opt
 git clone https://github.com/yaakovEntin/certification.git
 CERT="/opt/certification"
+ln -s ${CERT}/scripts/cert/test.stop /usr/bin/stop # setup test stopper
 AUTOSTART_SCRIPT="${CERT}/scripts/cert/test.autostart"
 cat << eof >> /home/compulab/.profile
 [[ -f $AUTOSTART_SCRIPT ]] && $AUTOSTART_SCRIPT
@@ -32,9 +33,6 @@ vi /etc/passwd # must have this line for the user to Set UIO=GID=0 :
 ```
 `compulab:x:0:0::/home/compulab:/bin/bash`
 hard reset 
-```
-ln -s ${CERT}/scripts/cert/test.stop /usr/bin/stop # setup test stopper
-```
 # Setup up for specific tests:
 ## Bluetooth :
 on DUT and AP:
