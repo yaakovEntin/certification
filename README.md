@@ -32,6 +32,9 @@ vi /etc/passwd # must have this line for the user to Set UIO=GID=0 :
 ```
 `compulab:x:0:0::/home/compulab:/bin/bash`
 hard reset 
+```
+ln -s ${CERT}/scripts/cert/test.stop /usr/bin/stop # setup test stopper
+```
 # Setup up for specific tests:
 ## Bluetooth :
 on DUT and AP:
@@ -92,5 +95,3 @@ to set modem test that checks sim and scans networks:
 `ln -snf bak/cell_scan cell`
 to set modem test that checks that modem's only alive:
 `ln -snf bak/cell_alive cell`
-# For development:
-ln -s ${CERT}/scripts/cert/test.stop /usr/bin/stop # setup test stopper
