@@ -19,6 +19,7 @@ AT_QSIMSTAT="AT+QSIMSTAT?"
 function Wait_until_modem_detected() {
     while [ ! -c ${cell_modem} ]; do
         echo 0 > ${cell_test_run}
+		echo "Waiting to detect modem ${cell_modem}"
         sleep ${cell_test_sleep};
     done
 }
