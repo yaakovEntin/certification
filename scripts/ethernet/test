@@ -1,0 +1,161 @@
+#!/bin/bash
+
+PATH=${PATH}":/sbin"
+
+CERT_INCLUDE_DIR=${1}
+. ${CERT_INCLUDE_DIR}/config.inc
+
+net_test_run=${CERT_TEST_STATUS_HOME}/${2}_test.run
+echo 0 > ${net_test_run}
+
+net_fini() {
+    ifconfig ${NET1} down 2>/dev/null || true
+    ifconfig ${NET2} down 2>/dev/null || true
+}
+
+net_ready() {
+    for iface in ${NET1} ${NET2}; do
+        local retry=10
+        echo "${iface}: waiting for carrier"
+        while [[ 0 -eq $(cat /sys/class/net/${iface}/carrier 2>/dev/null || true) ]]; do
+            [[ $((retry--)) -gt 0 ]] || break
+            echo -n " ... $(cat /sys/class/net/${iface}/carrier 2>/dev/null || true)"
+            sleep 1
+        done
+        local __carrier=$(cat /sys/class/net/${iface}/carrier 2>/dev/null || true)
+        if [[ ${__carrier:-"0"} -eq 0 ]]; then
+            echo "ERROR: ${iface}: bad carrier"
+            return 22
+        fi
+    done
+}
+
+net_init() {
+    net_fini
+    
+    ifconfig ${NET1} ${network}.50.0.1/24 up
+    ifconfig ${NET2} ${network}.50.1.1/24 up
+    ethtool -s ${NET1} speed 1000 2>/dev/null || true
+    ethtool -s ${NET2} speed 1000 2>/dev/null || true
+    
+    net_ready && rc=$? || rc=$?
+    return ${rc}
+}
+
+net_config() {
+    # nat source IP ${network}.50.0.1 -> ${network}.60.0.1 when going to ${network}.60.1.1
+    iptables -t nat -A POSTROUTING -s ${network}.50.0.1 -d ${network}.60.1.1 -j SNAT --to-source ${network}.60.0.1 2>/dev/null || true
+    
+    # nat inbound ${network}.60.0.1 -> ${network}.50.0.1
+    iptables -t nat -A PREROUTING -d ${network}.60.0.1 -j DNAT --to-destination ${network}.50.0.1 2>/dev/null || true
+    
+    # nat source IP ${network}.50.1.1 -> ${network}.60.1.1 when going to ${network}.60.0.1
+    iptables -t nat -A POSTROUTING -s ${network}.50.1.1 -d ${network}.60.0.1 -j SNAT --to-source ${network}.60.1.1 2>/dev/null || true
+    
+    # nat inbound ${network}.60.1.1 -> ${network}.50.1.1
+    iptables -t nat -A PREROUTING -d ${network}.60.1.1 -j DNAT --to-destination ${network}.50.1.1 2>/dev/null || true
+    
+    ip route add ${network}.60.1.1 dev ${NET1} 2>/dev/null || true
+    arp -i ${NET1} -s ${network}.60.1.1 $(cat /sys/class/net/${NET2}/address)
+    
+    ip route add ${network}.60.0.1 dev ${NET2} 2>/dev/null || true
+    arp -i ${NET2} -s ${network}.60.0.1 $(cat /sys/class/net/${NET1}/address)
+}
+
+net_server() {
+    local server_cmd="iperf3 -B ${network}.50.1.1 -s"
+    echo "Starting server [ ${server_cmd} ] ..."
+    ${server_cmd} --logfile ${iperf_log}.server 2>/dev/null
+    echo "Stopping server [ ${server_cmd} ] ..."
+}
+
+net_client() {
+    test_time=${test_time:-15}
+    declare -a client_cmds=(
+        "iperf3 -B ${network}.50.0.1 -c ${network}.60.1.1 -t ${test_time} -i 3"
+        "iperf3 -B ${network}.50.0.1 -c ${network}.60.1.1 -t ${test_time} -i 3 -R"
+    )
+    
+    for cmd_index in ${!client_cmds[@]}; do
+        local client_cmd=${client_cmds[${cmd_index}]}
+        echo "Starting client [ ${client_cmd} ] ..."
+        timeout $(( ${test_time} + 2 )) ${client_cmd} --logfile ${iperf_log}.${cmd_index}.client 2>/dev/null && rc=$? || rc=$?
+        echo "Stopping client [ ${client_cmd} ] ..."
+        [[ ${rc} -eq 124 ]] && rc=0
+        if [[ ${rc} -ne 0 ]]; then
+            echo "ERROR: Net loop ${NET1}~${NET2} test failed [${rc}]"
+            return ${rc}
+        fi
+    done
+    return 0
+}
+
+net_stat() {
+    echo "Statistics for ${NET1} and ${NET2}:"
+    for iface in ${NET1} ${NET2}; do
+        echo "Interface: ${iface}"
+        grep -ira . /sys/class/net/${iface}/statistics/ | awk '!/:0$/' >> ${iperf_log}.statistics 2>/dev/null || true
+    done
+}
+
+net_loop_main() {
+    rc=${rc:-0}
+    
+    ERROR_MESSAGE="${NET1} device not found"
+    [[ -e /sys/class/net/${NET1} ]] && true || return 3
+    ERROR_MESSAGE="${NET2} device not found"
+    [[ -e /sys/class/net/${NET2} ]] && true || return 4
+    
+    echo "Testing pair: ${NET1} <-> ${NET2}"
+    
+    iperf_log=${LLOGS:-/tmp}/iperf.${NET1}_${NET2}
+    network=${network:-10}
+    
+
+    net_init || {
+        echo "ERROR: Net loop ${NET1}~${NET2} init failed [${rc}]"
+        return 1
+    }
+    
+    net_config
+    sleep 1
+    net_server &
+    server_pid=$!
+    sleep 1
+    net_client && rc=$? || rc=$?
+    pkill -9 iperf3 2>/dev/null || true
+    net_stat
+    net_fini
+    
+    return ${rc}
+}
+
+echo "Starting ethernet loopback tests for eth interface pairs (eth0-1, eth2-3, eth4-5)"
+echo 0 > ${net_test_run}
+
+declare -a eth_pairs=(
+    "eth0 eth1"
+    "eth2 eth3"
+    "eth4 eth5"
+)
+
+while true; do
+    for pair in "${eth_pairs[@]}"; do
+        NET1=$(echo ${pair} | awk '{print $1}')
+        NET2=$(echo ${pair} | awk '{print $2}')
+        export NET1 NET2
+        
+        echo ""
+        echo "=========================================="
+        net_loop_main
+        pair_rc=$?
+        if [[ ${pair_rc} -ne 0 ]]; then
+            echo "FAILED: ${NET1} <-> ${NET2} test (rc=${pair_rc})"
+        else
+            echo "PASSED: ${NET1} <-> ${NET2} test"
+            echo 1 > ${net_test_run}
+        fi
+    done
+    echo "=========================================="
+    echo "All ethernet loopback tests completed"
+done
