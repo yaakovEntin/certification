@@ -16,7 +16,7 @@ TIMESTAMP_FORMAT="%Y%m%d_%H%M%S"
 UTIL_HOME=/usr/local/bin
 MISC_HOME=${CERT}/misc
 INSMOD_HOME=${MISC_HOME}/kernel
-[[ $(hostname) == iot-link ]] && wb_test_role="DUT" || wb_test_role="AP"
+[[ $(hostname) == ubuntu ]] && wb_test_role="DUT" || wb_test_role="AP"
 
 DEV_MODEL=$(tr -d '\0' < /proc/device-tree/model)
 REPEATS=3

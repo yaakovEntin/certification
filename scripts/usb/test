@@ -7,29 +7,55 @@ CERT_INCLUDE_DIR=${1}
 usb_test_run=${CERT_TEST_STATUS_HOME}/${2}_test.run
 echo 0 > ${usb_test_run}
 
-usb_dev="/dev/sda"
+USB3_CONTROLLER="/sys/devices/platform/bus@0/3610000.usb/usb2"
+USB3_EXPECTED_COUNT=3
 
-function test_usb() {
-while [ 1 ] ; do
-    sleep "${usb_sleep:-2}"
-    if [[ -b "$usb_dev" && "$(readlink -f /sys/block/$(basename "$usb_dev")/device)" == *usb* ]]; then
-        if timeout 5 dd if="$usb_dev" of=/tmp/usb_test.bin bs=1K count=100 iflag=direct &>/dev/null; then
-            echo 1 > "$usb_test_run"
-        else
-            echo 0 > "$usb_test_run"
+usb3_scan_devices() {
+    local scsi_hosts=()
+    local count=0
+    
+    # Scan for SCSI host entries under USB3 controller
+    # Each USB port gets a unique host* identifier
+    while IFS= read -r device_path; do
+        if [[ -n "${device_path}" ]]; then
+            scsi_hosts+=("${device_path}")
+            ((count++))
+            echo "USB3 port enumerated: ${device_path}"
         fi
+    done < <(find "${USB3_CONTROLLER}" -type d \
+        -path "*/scsi_host/host*" ! -path "*/power" 2>/dev/null)
+    
+    echo "Total USB3 ports found: ${count}"
+    
+    if [[ ${count} -eq ${USB3_EXPECTED_COUNT} ]]; then
+        return 0
     else
-        echo 0 > "$usb_test_run"
-        echo "USB device not present — attempting rebind"
-        echo '2-1' > /sys/bus/usb/drivers/usb/unbind
-        sleep 2
-        echo '2-1' > /sys/bus/usb/drivers/usb/bind
+        echo "ERROR: Expected ${USB3_EXPECTED_COUNT} USB3 ports, but found ${count}"
+        return 1
     fi
-done
 }
 
-#set -x
-if [[ "${wb_test_role}" == "DUT" ]] ; then
+function test_usb() {
+    while true; do
+        sleep "${usb_sleep:-2}"
+        
+        if usb3_scan_devices > /tmp/usb_test.log 2>&1; then
+            echo 1 > "$usb_test_run"
+            echo "${USB3_EXPECTED_COUNT} USB3 ports detected successfully"
+        else
+            echo 0 > "$usb_test_run"
+            echo "ERROR: USB3 port(s) not detected"
+            cat /tmp/usb_test.log
+            echo "Attempting USB controller rebind..."
+            echo '2' > /sys/bus/usb/drivers/usb/unbind 2>/dev/null || true
+            sleep 2
+            echo '2' > /sys/bus/usb/drivers/usb/bind 2>/dev/null || true
+            sleep 1
+        fi
+    done
+}
+
+if [[ "${wb_test_role}" == "DUT" ]]; then
     test_usb
 else
     echo 1 > ${usb_test_run}
