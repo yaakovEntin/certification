@@ -100,25 +100,24 @@ net_stat() {
 
 net_loop_main() {
     rc=${rc:-0}
-    
     ERROR_MESSAGE="${NET1} device not found"
     [[ -e /sys/class/net/${NET1} ]] && true || return 3
     ERROR_MESSAGE="${NET2} device not found"
     [[ -e /sys/class/net/${NET2} ]] && true || return 4
     
-    echo "Testing pair: ${NET1} <-> ${NET2}"
-    
     iperf_log=${LLOGS:-/tmp}/iperf.${NET1}_${NET2}
     network=${network:-10}
-    
 
     net_init || {
         echo "ERROR: Net loop ${NET1}~${NET2} init failed [${rc}]"
         return 1
     }
-    
-    net_config
-    sleep 1
+    if [[ ${first_run:-1} -eq 1 ]]; then
+        net_config
+        first_run=0
+        sleep 1
+    fi
+    echo "Testing pair: ${NET1} <-> ${NET2}"
     net_server &
     server_pid=$!
     sleep 1
@@ -126,11 +125,10 @@ net_loop_main() {
     pkill -9 iperf3 2>/dev/null || true
     net_stat
     net_fini
-    
     return ${rc}
 }
 
-echo "Starting ethernet loopback tests for eth interface pairs (eth0-1, eth2-3, eth4-5)"
+echo "Starting ethernet loopback tests for pairs: eth0-1, eth2-3, eth4-5"
 echo 0 > ${net_test_run}
 
 declare -a eth_pairs=(
@@ -144,8 +142,6 @@ while true; do
         NET1=$(echo ${pair} | awk '{print $1}')
         NET2=$(echo ${pair} | awk '{print $2}')
         export NET1 NET2
-        
-        echo ""
         echo "=========================================="
         net_loop_main
         pair_rc=$?
