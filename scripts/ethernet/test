@@ -5,8 +5,8 @@ PATH=${PATH}":/sbin"
 CERT_INCLUDE_DIR=${1}
 . ${CERT_INCLUDE_DIR}/config.inc
 
-net_test_run=${CERT_TEST_STATUS_HOME}/${2}_test.run
-echo 0 > ${net_test_run}
+eth_test_run=${CERT_TEST_STATUS_HOME}/${2}_test.run
+echo 0 > ${eth_test_run}
 
 net_fini() {
     ifconfig ${NET1} down 2>/dev/null || true
@@ -129,7 +129,7 @@ net_loop_main() {
 }
 
 echo "Starting ethernet loopback tests for pairs: eth0-1, eth2-3, eth4-5"
-echo 0 > ${net_test_run}
+echo 0 > ${eth_test_run}
 
 declare -a eth_pairs=(
     "eth0 eth1"
@@ -137,21 +137,25 @@ declare -a eth_pairs=(
     "eth4 eth5"
 )
 
-while true; do
-    for pair in "${eth_pairs[@]}"; do
-        NET1=$(echo ${pair} | awk '{print $1}')
-        NET2=$(echo ${pair} | awk '{print $2}')
-        export NET1 NET2
+if [[ "${system_role}" == "DUT" ]]; then
+    while true; do
+        for pair in "${eth_pairs[@]}"; do
+            NET1=$(echo ${pair} | awk '{print $1}')
+            NET2=$(echo ${pair} | awk '{print $2}')
+            export NET1 NET2
+            echo "=========================================="
+            net_loop_main
+            pair_rc=$?
+            if [[ ${pair_rc} -ne 0 ]]; then
+                echo "FAILED: ${NET1} <-> ${NET2} test (rc=${pair_rc})"
+            else
+                echo "PASSED: ${NET1} <-> ${NET2} test"
+                echo 1 > ${eth_test_run}
+            fi
+        done
         echo "=========================================="
-        net_loop_main
-        pair_rc=$?
-        if [[ ${pair_rc} -ne 0 ]]; then
-            echo "FAILED: ${NET1} <-> ${NET2} test (rc=${pair_rc})"
-        else
-            echo "PASSED: ${NET1} <-> ${NET2} test"
-            echo 1 > ${net_test_run}
-        fi
+        echo "All ethernet loopback tests completed"
     done
-    echo "=========================================="
-    echo "All ethernet loopback tests completed"
-done
+else
+    echo 1 > ${eth_test_run}
+fi

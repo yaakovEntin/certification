@@ -135,8 +135,11 @@ can_test() {
         return 1
     fi
 }
-
-while true; do
-    can_test
-    sleep "${can_sleep:-2}"
-done
+if [[ "${system_role}" == "DUT" ]] ; then
+    while true; do
+        can_test
+        sleep "${can_sleep:-2}"
+    done
+else
+	echo 1 > ${dio_test_run}
+fi

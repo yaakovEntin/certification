@@ -3,41 +3,50 @@
 CERT_INCLUDE_DIR=${1}
 . ${CERT_INCLUDE_DIR}/config.inc
 
+command -v gpioget >/dev/null 2>&1 || { echo "Error: gpioget not found"; exit 1; }
+command -v gpioset >/dev/null 2>&1 || { echo "Error: gpioset not found"; exit 1; }
+
 dio_test_run=${CERT_TEST_STATUS_HOME}/${2}_test.run
 echo 0 > ${dio_test_run}
 
 function dio_test() {
-	declare -a DIO_ARR=( "21 5" "17 12" "16 4")
-	# pin | in           | out             | connection
-	# --- | ------------ | --------------  |
-	# 2   | gpioget 0 16 -- gpioset 0 4=0  | inter
-	# 3   | gpioget 0 17 \/ gpioset 0 5=0  | cross with pin 4
-	# 4   | gpioget 0 21 /\ gpioset 0 12=0 | cross with pin 3
+	declare -a DIO_ARR=( "85 105" "43 106" )
+	declare -A GPIO_TO_PIN=( [85]=1 [105]=4 [43]=3 [106]=6 )
+	# pin | cmd   		    | connection to pin
+	# --- | --------------- | -----------------
+	# 1   | gpioget 0 85    | 4
+	# 3   | gpioget 0 43    | 6
+	# 4   | gpioset 0 105=1 | 1
+	# 6   | gpioset 0 106=1 | 3
 	declare -a VAL_ARR=(0 1)
 	local get_val=0
 	local errcode=0
 	for pair in "${DIO_ARR[@]}" ; do
 		read din dout <<< "$pair"
 		for set_val in ${VAL_ARR[@]} ; do
-			gpioset 0 ${dout}=${set_val}
-			get_val=$(gpioget 0 ${din})
-			if [[ ${set_val} -eq ${get_val} ]]; then # condition is inverted as the design
-				(( errcode |= 1 ))
-			else
-				sleep 1
+			gpioset -m time -s 5 0 ${dout}=${set_val} 2>/dev/null &
+			pid=$!
+			sleep 0.2
+			if ! get_val=$(gpioget 0 ${din} 2>/dev/null); then
+				echo "Warning: Could not read GPIO ${din}"
 			fi
+			kill $pid 2>/dev/null || true
+			wait $pid 2>/dev/null || true
+			if [[ ${set_val} -ne ${get_val} ]]; then 
+				echo "DIO test failed: set pin ${GPIO_TO_PIN[$dout]} to ${set_val}, but read pin ${GPIO_TO_PIN[$din]} as ${get_val}"
+				(( errcode |= 1 ))
+			fi
+			sleep 0.5
 		done
-		gpioget 0 ${dout} > /dev/null # out pin is intra connected to in pin,
-		# set its direction to input to not collide with the cross connected out
 	done
 	return ${errcode}
 }
 
 function dio_loop_test() {
-	while [ 1 ] ; do
+	local retry_count=0
+	while true ; do
 		dio_test
 		echo $(( $? ^ 1 )) > "${dio_test_run}"
-		sleep 2
 	done
 }
 
