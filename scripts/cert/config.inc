@@ -16,7 +16,7 @@ TIMESTAMP_FORMAT="%Y%m%d_%H%M%S"
 UTIL_HOME=/usr/local/bin
 MISC_HOME=${CERT}/misc
 INSMOD_HOME=${MISC_HOME}/kernel
-[[ $(hostname) == ubuntu ]] && wb_test_role="DUT" || wb_test_role="AP"
+[[ $(hostname) == ubuntu ]] && system_role="DUT" || system_role="AP"
 
 DEV_MODEL=$(tr -d '\0' < /proc/device-tree/model)
 REPEATS=3
@@ -30,8 +30,6 @@ BT_RX_MAC="8C:1D:96:F1:87:C1"
 
 # CAN test
 can_bitrate=125000
-can_tx=0
-can_rx=USB
 # 0 = off, 1 = animation, 2 = on
 can_silent_mode=2
 

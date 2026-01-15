@@ -53,7 +53,7 @@ do
         TEST_STATUS=$(cat ${CERT_TEST_STATUS_HOME}/${test_name}_test.run)
         echo "sample $test_name"
         if [ "${TEST_STATUS}" == "1" ]; then
-            if [[ "${wb_test_role}" == "DUT" ]] ; then
+            if [[ "${system_role}" == "DUT" ]] ; then
                 status_led_1="green"
                 status_led_2="power-blue"
             else
@@ -62,7 +62,7 @@ do
             fi
         else
             echo "Error in $test_name"
-            if [[ "${wb_test_role}" == "DUT" ]] ; then
+            if [[ "${system_role}" == "DUT" ]] ; then
                 status_led_1="red"
                 status_led_2="amber"
             else

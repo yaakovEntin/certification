@@ -1,0 +1,142 @@
+#!/bin/bash
+
+CERT_INCLUDE_DIR=${1}
+. ${CERT_INCLUDE_DIR}/config.inc
+
+can_test_run=${CERT_TEST_STATUS_HOME}/${2}_test.run
+echo 0 > ${can_test_run}
+
+# USB CAN adapter detection
+USB_CAN_VENDOR="1d50"
+USB_CAN_PRODUCT="606f"
+USB_CAN_PATH="/devices/platform/bus@0/3610000.usb/usb1"
+CAN_RX_IFACE=${can_rx_iface:-"can0"}
+CAN_TX_IFACE=${can_tx_iface:-"can1"}
+CAN_BITRATE=${can_bitrate:-500000}
+CAN_TEST_DURATION=${can_test_duration:-15}
+
+can_wait_for_usb_adapter() {
+    local retry=30
+    echo "Waiting for USB CAN adapter (${USB_CAN_VENDOR}:${USB_CAN_PRODUCT}) ..."
+    
+    while [[ ${retry} -gt 0 ]]; do
+        if lsusb | grep -q "${USB_CAN_VENDOR}:${USB_CAN_PRODUCT}"; then
+            echo "USB CAN adapter detected"
+            return 0
+        fi
+        echo -n "."
+        sleep 1
+        ((retry--))
+    done
+    
+    echo "ERROR: USB CAN adapter not enumerated"
+    return 1
+}
+
+can_load_kernel_module() {
+    echo "Loading gs_usb kernel module ..."
+    if ! lsmod | grep -q "^gs_usb"; then
+        insmod $CERT/misc/gs_usb.ko 2>/dev/null
+        if [[ $? -ne 0 ]]; then
+            echo "ERROR: Failed to load gs_usb module"
+            return 1
+        fi
+        sleep 2
+    fi
+    echo "gs_usb module loaded"
+    return 0
+}
+
+can_wait_for_ifaces() {
+    local retry=10
+    echo "Waiting for CAN interfaces (${CAN_RX_IFACE}, ${CAN_TX_IFACE}) ..."
+    
+    while [[ ${retry} -gt 0 ]]; do
+        local rx_ok=0
+        local tx_ok=0
+        
+        ip link show ${CAN_RX_IFACE} &>/dev/null && rx_ok=1
+        ip link show ${CAN_TX_IFACE} &>/dev/null && tx_ok=1
+        
+        if [[ ${rx_ok} -eq 1 && ${tx_ok} -eq 1 ]]; then
+            echo "Both CAN interfaces ready"
+            return 0
+        fi
+        echo -n "."
+        sleep 1
+        ((retry--))
+    done
+    
+    echo "ERROR: CAN interfaces not created"
+    return 1
+}
+
+can_config() {
+    for iface in ${CAN_RX_IFACE} ${CAN_TX_IFACE}; do
+        echo "Configuring ${iface} at ${CAN_BITRATE} bps"
+        ip link set ${iface} down 2>/dev/null || true
+        ip link set ${iface} type can bitrate ${CAN_BITRATE}
+        ip link set ${iface} up
+        
+        if ! ip link show ${iface} | grep -q "UP"; then
+            echo "ERROR: Failed to bring up ${iface}"
+            return 1
+        fi
+    done
+}
+
+can_test() {
+    can_wait_for_usb_adapter || {
+        echo 0 > ${can_test_run}
+        return 1
+    }
+    
+    if [[ ${first_run:-1} -eq 1 ]]; then
+        can_load_kernel_module || {
+            echo 0 > ${can_test_run}
+            return 1
+        }
+        first_run=0
+        sleep 1
+    fi
+        
+    can_wait_for_ifaces || {
+        echo 0 > ${can_test_run}
+        return 1
+    }
+    
+    can_config || {
+        echo 0 > ${can_test_run}
+        return 1
+    }
+    
+    echo "Starting CAN receiver on ${CAN_RX_IFACE} ..."
+    timeout $((CAN_TEST_DURATION + 2)) candump ${CAN_RX_IFACE} > /tmp/can_rx.log 2>&1 &
+    local receiver_pid=$!
+    sleep 1
+    
+    echo "Sending CAN frames on ${CAN_TX_IFACE} for ${CAN_TEST_DURATION}s ..."
+    timeout ${CAN_TEST_DURATION} cangen -g 50 -e -D r -v ${CAN_TX_IFACE} > /tmp/can_tx.log 2>&1
+    local tx_rc=$?
+    
+    wait ${receiver_pid} 2>/dev/null
+    
+    if grep -q ${CAN_RX_IFACE} /tmp/can_rx.log 2>/dev/null; then
+        echo "CAN frames sent and received successfully"
+        echo 1 > ${can_test_run}
+        return 0
+    else
+        echo "ERROR: No CAN frames received on ${CAN_RX_IFACE}"
+        echo "TX log:"
+        cat /tmp/can_tx.log
+        echo "RX log:"
+        cat /tmp/can_rx.log
+        echo 0 > ${can_test_run}
+        return 1
+    fi
+}
+
+while true; do
+    can_test
+    sleep "${can_sleep:-2}"
+done

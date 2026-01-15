@@ -32,7 +32,7 @@ function func_test-WB_AP() {
 
 #set -x
 lsmod | grep -q moal || modprobe moal
-if [[ "${wb_test_role}" == "AP" ]] ; then
+if [[ "${system_role}" == "AP" ]] ; then
 	func_test-WB_AP
 else
 	func_test-WB

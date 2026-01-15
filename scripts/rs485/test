@@ -72,7 +72,7 @@ done
 }
 
 #set -x
-if [[ "${wb_test_role}" == "DUT" ]] ; then
+if [[ "${system_role}" == "DUT" ]] ; then
     func_test-RS485
 else
     echo 1 > ${rs485_test_run}

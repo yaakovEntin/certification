@@ -106,7 +106,7 @@ function main() {
 }
 
 #set -x
-if [[ "${wb_test_role}" == "DUT" ]] ; then
+if [[ "${system_role}" == "DUT" ]] ; then
     main SCAN # SIM
 else
     echo 1 > ${cell_test_run}

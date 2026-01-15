@@ -41,7 +41,7 @@ function dio_loop_test() {
 	done
 }
 
-if [[ "${wb_test_role}" == "DUT" ]] ; then
+if [[ "${system_role}" == "DUT" ]] ; then
 	dio_loop_test
 else
 	echo 1 > ${dio_test_run}

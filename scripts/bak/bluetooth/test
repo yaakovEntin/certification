@@ -34,7 +34,7 @@ function bt_obex_tx() {
 }
 
 function bt_run_test() {
-    if [[ "${wb_test_role}" == "DUT" ]] ; then
+    if [[ "${system_role}" == "DUT" ]] ; then
 		bt_obex_tx
 	else
         echo 1 > ${bt_test_run}

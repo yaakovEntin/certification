@@ -55,7 +55,7 @@ function test_usb() {
     done
 }
 
-if [[ "${wb_test_role}" == "DUT" ]]; then
+if [[ "${system_role}" == "DUT" ]]; then
     test_usb
 else
     echo 1 > ${usb_test_run}
