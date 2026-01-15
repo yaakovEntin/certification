@@ -1,0 +1,58 @@
+#!/bin/bash
+
+CERT_INCLUDE_DIR=${1}
+. ${CERT_INCLUDE_DIR}/config.inc
+
+rs232_test_run=${CERT_TEST_STATUS_HOME}/${2}_test.run
+echo 0 > ${rs232_test_run}
+
+RS232_PORT="/dev/ttyS0"
+RS232_BAUD=115200
+RS232_TIMEOUT=2
+
+function rs232_test() {
+	local errcode=0
+	local test_data="RS232_TEST"
+	local read_data=""
+	
+	if [[ ! -e ${RS232_PORT} ]]; then
+		echo "Error: ${RS232_PORT} not found"
+		return 1
+	fi
+	
+	if ! stty -F ${RS232_PORT} ${RS232_BAUD} cs8 -cstopb -parenb raw -echo -icanon min 1 time 0 2>/dev/null; then
+		echo "Error: Could not configure ${RS232_PORT}"
+		return 1
+	fi
+	
+	timeout ${RS232_TIMEOUT} cat ${RS232_PORT} > /tmp/rs232_read.$$ 2>/dev/null &
+	local read_pid=$!
+	sleep 0.2
+	echo -e "${test_data}" > ${RS232_PORT} 2>/dev/null
+	wait $read_pid 2>/dev/null
+	
+	if [[ -f /tmp/rs232_read.$$ ]]; then
+		read_data=$(cat /tmp/rs232_read.$$)
+		rm -f /tmp/rs232_read.$$
+	fi
+	
+	if [[ "${test_data}" != "${read_data}" ]]; then
+		echo "RS232 test failed: sent '${test_data}', received '${read_data}'"
+		errcode=1
+	fi
+	return ${errcode}
+}
+
+function rs232_loop_test() {
+	while true ; do
+        rs232_test
+		echo $(( $? ^ 1 )) > "${rs232_test_run}"
+		sleep 2
+	done
+}
+
+if [[ "${system_role}" == "DUT" ]] ; then
+	rs232_loop_test
+else
+	echo 1 > ${rs232_test_run}
+fi
