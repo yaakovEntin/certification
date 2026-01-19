@@ -8,8 +8,61 @@ cell_test_run=${CERT_TEST_STATUS_HOME}/${2}_test.run
 echo 0 > ${cell_test_run}
 
 at_test_output=${CERT_TEST_OUTPUT}/${2}_test.out
-modem_name=cell_modem
-at_modem="${!modem_name}"
+
+# Detect modem and set correct AT port
+function detect_modem_port() {
+	local telit_fn990="1bc7:1070"
+	local telit_le910c4="1bc7:1031"
+
+	# Try using mmcli first
+	if command -v mmcli &>/dev/null; then
+		local modem_list=$(mmcli -L)
+		local modem_id=$(echo "${modem_list}" | grep -oP "Modem/\K[0-9]+" | head -1)
+		if [[ -n "${modem_id}" ]]; then
+			local modem_name=$(echo "${modem_list}" | grep -oP "\[.*?\]" | sed 's/\[//;s/\]//' | head -1)
+			echo "ModemManager modem ${modem_id} detected: ${modem_name}"
+			local modem_info=$(mmcli -m ${modem_id})
+			echo "DEBUG: Extracting AT port from mmcli output..." >&2
+			echo "${modem_info}" | grep -i "ports:" >&2
+			# Extract AT port - look for (at) in the ports line
+			local at_port=$(echo "${modem_info}" | grep -iE "ports:" | grep -oP "(ttyUSB|ttyACM)\d+\s*\(at\)" | head -1 | grep -oP "(ttyUSB|ttyACM)\d+")
+			if [[ -n "${at_port}" ]]; then
+				cell_modem="/dev/${at_port}"
+				echo "Using mmcli detected AT port: ${cell_modem}"
+				at_modem="${cell_modem}"
+				return 0
+			else
+				echo "Warning: mmcli detected modem but couldn't extract AT port, falling back to USB detection" >&2
+			fi
+		fi
+	fi
+
+	# Fallback to lsusb
+	local usb_devices=$(lsusb -d ${telit_le910c4} 2>/dev/null || lsusb -d ${telit_fn990} 2>/dev/null || echo "")
+	if [[ -n "${usb_devices}" ]]; then
+		echo "Telit modem detected via lsusb"
+		if [[ -e "/dev/ttyUSB2" ]]; then
+			cell_modem="/dev/ttyUSB2"
+			echo "Using standard Telit AT port: ${cell_modem}"
+		elif ls /dev/ttyUSB* &>/dev/null; then
+			cell_modem="$(ls /dev/ttyUSB* | sort -V | tail -1)"  # Use last ttyUSB port
+			echo "Using highest ttyUSB port: ${cell_modem}"
+		elif ls /dev/ttyACM* &>/dev/null; then
+			cell_modem="$(ls /dev/ttyACM* | head -1)"
+			echo "Using ttyACM port: ${cell_modem}"
+		else
+			echo "Error: No ttyUSB or ttyACM ports found"
+			return 1
+		fi
+	else
+		echo "Using default cell_modem: ${cell_modem}"
+	fi
+
+	at_modem="${cell_modem}"
+	echo "AT modem port set to: ${at_modem}"
+}
+
+detect_modem_port
 
 AT_RESET="AT+CFUN=1,1"
 AT_SCAN_NET="AT+COPS=?"
@@ -65,22 +118,34 @@ function wait_for_sim() {
 }
 
 function scan_networks() {
-    local y=0
+    echo "=== Cell Operators Scan ==="
     : > ${at_test_output}
     Wait_until_modem_detected
-    echo -e "${AT_SCAN_NET}\r" > ${cell_modem}
-    timeout ${cell_test_scan_timeout} cat ${cell_modem} > ${at_test_output} &
-    local pid=$!
-    echo -n " ### [ ${y} ] Cell Operators Scan ... "
-    for i in $(seq 0 ${cell_test_scan_timeout}); do
-        sleep 1; # echo -n $i" ";
-        if [[ $(grep -c "OK" ${at_test_output}) -gt 0 ]]; then
-            kill -9 ${pid} > /dev/null
-            break
+
+    # Start reader in background
+    timeout ${cell_test_scan_timeout} cat ${cell_modem} > ${at_test_output} 2>/dev/null &
+    local read_pid=$!
+    sleep 0.2
+
+    # Send AT command
+    echo -e "${AT_SCAN_NET}\r" > ${cell_modem} 2>/dev/null
+
+    # Wait for completion
+    wait ${read_pid} 2>/dev/null
+
+    # Check for any response (OK or ERROR, indicates modem is responding)
+    if grep -qE "OK|ERROR" ${at_test_output}; then
+        echo "Modem scan completed (modem is responding)"
+        # Also show what was scanned if successful
+        if grep -q "OK" ${at_test_output}; then
+            echo "Found operators:"
+            grep "+COPS" ${at_test_output} || echo "  (no operators found)"
         fi
-    done
-    y=$((y + 1))
-    : > ${at_test_output}
+        return 0
+    else
+        echo "Scan timeout or no response from modem"
+        return 1
+    fi
 }
 
 function main() {
@@ -88,9 +153,8 @@ function main() {
     while [ 1 ]; do
         Wait_until_modem_detected
 		initialize_the_modem_TTY_device
-        wait_for_sim ${sim_detect}
-        if [[ ${scenario} == "SIM" ]] ; then # SIM found
-            # Cell test scenario is SIM detection only
+        if [[ ${scenario} == "SIM" ]] ; then
+            wait_for_sim ${sim_detect}
             echo 1 > ${cell_test_run}
             sleep ${cell_test_sleep}
             continue
@@ -98,7 +162,7 @@ function main() {
         sleep 2 # rest between AT commands otherwise
         if [[ ${scenario} == "SCAN" ]] ; then
             scan_networks
-            echo 1 > ${cell_test_run}
+		    echo $(( $? ^ 1 )) > "${cell_test_run}"
             sleep ${cell_test_sleep}
             continue
         fi

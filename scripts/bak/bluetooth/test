@@ -22,13 +22,9 @@ bt_config() {
 }
 
 function bt_obex_tx() {
-	while [[ 1 ]] ; do
+	while true ; do
 		bt-obex -p ${BT_RX_MAC} ${bt_test_file_src} &> /dev/null
-		if [[ $? -eq 0 ]] ; then
-			echo 1 > ${bt_test_run}
-		else
-			echo 0 > ${bt_test_run}
-        fi
+		echo $(( $? ^ 1 )) > "${bt_test_run}"
 		sleep ${bt_test_sleep}
 	done
 }
