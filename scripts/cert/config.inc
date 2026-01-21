@@ -42,7 +42,7 @@ cell_test_scan_timeout=80
 cell_test_sim_timeout=2
 cell_rst_gpio_chip=0
 cell_rst_gpio=22
-#sim_detect=1
+sim_detect=0
 cell_test_sleep=10
 # AT commands
 AT_DEFAULT_CMD="AT"
