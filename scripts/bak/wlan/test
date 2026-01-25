@@ -7,31 +7,94 @@ CERT_INCLUDE_DIR=${1}
 test_state=${CERT_TEST_STATUS_HOME}/${2}_test.run
 echo 0 > ${test_state}
 
+wifi_log=/tmp/wifi_test.log
+: > ${wifi_log}
+
+function log_msg() {
+	echo "[$(date '+%Y-%m-%d %H:%M:%S')] $@" | tee -a ${wifi_log}
+}
+
+consecutive_fails=0
+
+function reconnect() {
+    log_msg "WiFi DUT: Connecting to ${wlan_nmcli_WF_con}..."
+    if timeout 30 nmcli connection up "${wlan_nmcli_WF_con}" >> ${wifi_log} 2>&1; then
+        log_msg "WiFi DUT: Connected successfully"
+        sleep 3  # Wait longer for IP configuration and signal stability
+        consecutive_fails=0
+    else
+        log_msg "WiFi DUT: Connection failed"
+        echo 0 > "${test_state}"
+        sleep 5
+        continue
+    fi
+}
+
 function func_test-WB() {
-    while [ 1 ]; do
-        nmcli connection up ${wlan_nmcli_WF_con}
-        if [[ $? -eq 0 ]]; then
-            timeout 5 ping -c 5 ${wlan_ap} -i ${wlan_test_ping_ival} > /dev/null 2>&1
-            if [[ $? -eq 0 ]]; then
-                echo 1 > "${test_state}"
-            else
-                echo 0 > "${test_state}"
-            fi
-        else
-            echo 0 > "${test_state}"
-        fi
-        nmcli connection down ${wlan_nmcli_WF_con}
-        sleep 1
-    done
+	log_msg "WiFi DUT: Starting WiFi test"
+	
+	while true; do
+		# Check actual WiFi device state using nmcli device
+		local connection_name=$(nmcli device show ${wlan_iface} 2>/dev/null | grep "CONNECTION:" | awk '{print $2}')
+		local state=$(nmcli device show ${wlan_iface} 2>/dev/null | grep "STATE:" | awk '{print $3}')
+		
+		log_msg "WiFi DUT: Device connection_name=${wlan_nmcli_WF_con}, state=${state}"
+		
+		if [[ "${connection_name}" != ${wlan_nmcli_WF_con} ]] || [[ "${state}" != "(connected)" ]]; then
+			log_msg "WiFi DUT: Device not connected, reconnecting..."
+			nmcli connection down "${wlan_nmcli_WF_con}" >> ${wifi_log} 2>&1
+			sleep 1
+			reconnect
+		fi
+		
+        local signal=$(iw ${wlan_iface} link 2>/dev/null | grep "signal:" | awk '{print $2,$3}')
+        log_msg "WiFi DUT: Signal strength: ${signal}"
+		if timeout 10 ping -c 10 -i ${wlan_test_ping_ival} ${wlan_ap} > /dev/null 2>&1; then
+			log_msg "WiFi DUT: Ping to ${wlan_ap} successful"
+			echo 1 > "${test_state}"
+			consecutive_fails=0
+		else
+			log_msg "WiFi DUT: Ping to ${wlan_ap} failed"
+			local link_info=$(iw ${wlan_iface} link 2>/dev/null | head -5)
+			log_msg "WiFi DUT: Link info:\n${link_info}"
+			echo 0 > "${test_state}"
+			(( consecutive_fails++ ))
+			
+			if [[ ${consecutive_fails} -ge 2 ]]; then
+				log_msg "WiFi DUT: Consecutive failures detected, reconnecting..."
+				reconnect
+			fi
+		fi
+		sleep 10
+	done
 }
 
 function func_test-WB_AP() {
-	nmcli connection up ${wlan_nmcli_HS_con}
-    echo 1 > ${test_state}
+	log_msg "WiFi AP: Starting WiFi hotspot"
+	
+	if timeout 30 nmcli connection up ${wlan_nmcli_HS_con} >> ${wifi_log} 2>&1; then
+		log_msg "WiFi AP: Hotspot started successfully"
+		echo 1 > ${test_state}
+		
+		while true; do
+			if nmcli connection show --active | grep -q "${wlan_nmcli_HS_con}"; then
+				log_msg "WiFi AP: Hotspot is active"
+				echo 1 > ${test_state}
+			else
+				log_msg "WiFi AP: Hotspot went down, restarting..."
+				timeout 30 nmcli connection up ${wlan_nmcli_HS_con} >> ${wifi_log} 2>&1
+				echo 0 > ${test_state}
+			fi
+			sleep 10
+		done
+	else
+		log_msg "WiFi AP: Failed to start hotspot"
+		echo 0 > ${test_state}
+		sleep 5
+	fi
 }
 
 #set -x
-lsmod | grep -q moal || modprobe moal
 if [[ "${system_role}" == "AP" ]] ; then
 	func_test-WB_AP
 else
