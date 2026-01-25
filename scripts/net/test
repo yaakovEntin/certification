@@ -4,7 +4,6 @@ CERT_INCLUDE_DIR=${1}
 . ${CERT_INCLUDE_DIR}/config.inc
 
 net_test_run=${CERT_TEST_STATUS_HOME}/${2}_test.run
-echo 0 > ${net_test_run}
 
 net_set_speed() {
 	local netspeed=${1:-1000}
@@ -18,14 +17,14 @@ CLIENT_IP=10.50.0.1
 net_server() {
 	ifconfig eth0 ${SERVER_IP}/24
     echo 1 > ${net_test_run}
-	iperf3 -B ${SERVER_IP} -s > /dev/null
+	iperf3 -s > /dev/null
 }
 
 net_client() {
-	ifconfig eth0 ${CLIENT_IP}/24
-	while [ 1 ]
+	while true
 	do
-        iperf3 -B ${CLIENT_IP} -c ${SERVER_IP} -b ${net_bandwidth} -t 60 -i 3 > /dev/null
+		ifconfig eth0 ${CLIENT_IP}/24 up
+        iperf3 -c ${SERVER_IP} -b ${net_bandwidth} -t 60 -i 3 > /dev/null
 		sleep 1
 	done
 }
@@ -33,7 +32,7 @@ net_client() {
 net_status() {
 	local prev_tx_pkts=$(cat /sys/class/net/eth0/statistics/tx_packets)
 	local curr_tx_pkts=${prev_tx_pkts}
-	while [ 1 ]
+	while true
 	do
 		sleep 3
 		operstate=$(cat /sys/class/net/eth0/operstate)

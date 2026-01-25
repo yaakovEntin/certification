@@ -8,7 +8,7 @@ test_state=${CERT_TEST_STATUS_HOME}/${2}_test.run
 echo 0 > ${test_state}
 
 function func_test-WB() {
-    while [ 1 ]; do
+    while true; do
         nmcli connection up ${wlan_nmcli_WF_con}
         if [[ $? -eq 0 ]]; then
             timeout 5 ping -c 5 ${wlan_ap} -i ${wlan_test_ping_ival} > /dev/null 2>&1
