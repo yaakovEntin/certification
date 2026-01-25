@@ -4,6 +4,10 @@ CERT_INCLUDE_DIR=${1}
 . ${CERT_INCLUDE_DIR}/config.inc
 . ${CERT_INCLUDE_DIR}/ifm-common.inc
 
+rs485_sleep=5
+rs485_serial_speed=115200
+rs485_serial_opts="time 5 ignbrk -brkint -icrnl -imaxbel -opost -onlcr -isig -icanon -iexten -echo -echoe -echok -echoctl -echoke"
+
 rs485_test_run=${CERT_TEST_STATUS_HOME}/${2}_test.run
 echo 0 > ${rs485_test_run}
 
@@ -60,7 +64,7 @@ function tty_ping_pong_test() {
 }
 
 function func_test-RS485() {
-while [ 1 ] ; do
+while true ; do
     sleep ${rs485_sleep}
     tty_ping_pong_test
     if [[ $? -eq 0 ]] ; then

@@ -7,8 +7,8 @@ CERT_INCLUDE_DIR=${1}
 usb_test_run=${CERT_TEST_STATUS_HOME}/${2}_test.run
 echo 0 > ${usb_test_run}
 
-USB3_CONTROLLER="/sys/devices/platform/bus@0/3610000.usb/usb2"
-USB3_EXPECTED_COUNT=3
+USB3_CONTROLLER="/sys/devices/platform/bus@0/3610000.usb"
+USB3_EXPECTED_COUNT=5
 
 usb3_scan_devices() {
     local scsi_hosts=()
