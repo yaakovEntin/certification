@@ -1,17 +1,10 @@
-A sequence of LED blinks signals each test status with a period of 1 second:
-- green and blue: success
-- red and amber: error
-There are 3 seconds pause between each sequence
-
-note that it takes about a 1.5 min for the modem to find networks, until then it will be red.
 # setup repo
-* install Debian to the DUT:
-https://mediawiki.compulab.com/w/index.php?title=IOT-LINK:_Debian_Linux:_Installation 
+* install ubuntu to the DUT with compulab user
 * on DUT run:
 ```
 sudo -i
 cd /opt
-git clone https://github.com/yaakovEntin/certification.git
+git clone https://github.com/yaakovEntin/certification.git -b edge-ai
 CERT="/opt/certification"
 ln -s ${CERT}/scripts/cert/test.stop /usr/bin/stop # setup test stopper
 AUTOSTART_SCRIPT="${CERT}/scripts/cert/test.autostart"
@@ -29,11 +22,12 @@ cat /home/compulab/.profile
 ### password 
 ```
 passwd -d compulab
-vi /etc/passwd # must have this line for the user to Set UIO=GID=0 :
+vi /etc/passwd # add this line to Set UIO=GID=0 :
 ```
 `compulab:x:0:0::/home/compulab:/bin/bash`
 hard reset 
-# Setup up for specific tests:
+# Setup up for specific interfaces:
+connect antennas
 ## Bluetooth :
 on DUT and AP:
 ```
@@ -47,19 +41,17 @@ In interactive session:
 power on
 discoverable on
 pairable on
-agent on
 ```
-on DUT:
+bind DUT to AP (do for each unit):
 ```
-pair 8C:1D:96:F1:87:C1
-trust 8C:1D:96:F1:87:C1
+scan on
+pair A0:D3:65:BD:E1:23
+trust A0:D3:65:BD:E1:23
+connect A0:D3:65:BD:E1:23
 ```
+if connection was established even for few seconds, binding succeeded
 ## Wifi
 `sudo nmcli device wifi connect IOTG-IMX8PLUS-AP password q1w2e3r4 name WifiCon-wlan0 ifname wlan0`
-## Net
-`nmcli device set eth0 managed no`
-
-Before deployment remove any set -e
 # set watchdog
 `vi /etc/systemd/system.conf`
 change :
@@ -69,27 +61,25 @@ WatchdogDevice=watchdog0
 ```
 `systemctl daemon-reexec`
 # control
-to stop all tests run:
+to stop testing run:
 `stop`
 
-to restart tests press:
+to restart testing press:
 - ctrl+d
 
-In order to disable cellular test run:
+In order to disable a test for next run :
 ```
-stop
 rm ${CERT}/scripts/scan_cell/.autostart
 ```
 ctrl+d
 
-to re-enable it:
+to enable it for next run :
 ```
-stop
 touch ${CERT}/scripts/scan_cell/.autostart
 ```
 ctrl+d
 
-to set modem test that checks sim and scans networks:
+to set modem test that scans networks:
 `ln -snf bak/cell_scan cell`
-to set modem test that checks that modem's only alive:
+to set modem test that only checks that modem's alive:
 `ln -snf bak/cell_alive cell`

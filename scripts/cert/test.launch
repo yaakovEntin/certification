@@ -3,6 +3,9 @@
 CERT_INCLUDE_DIR=${CERT_HOME}/cert
 . ${CERT_INCLUDE_DIR}/config.inc
 
+# Suppress test output by default; set VERBOSE=1 for debug
+VERBOSE=${VERBOSE:-0}
+
 function set_status_led() {
 	local led_name=${1}
 	local led_path=/sys/class/leds/${led_name}
@@ -10,11 +13,15 @@ function set_status_led() {
 	[[ -L ${led_path} ]] && echo ${state} > ${led_path}/brightness
 }
 
+function log_verbose() {
+	[[ ${VERBOSE} -eq 1 ]] && echo "$@"
+}
+
 # Create temp directories
 if [ -d ${CERT_TEST_STATUS_HOME} ] && [ -d ${CERT_TEST_OUTPUT} ]; then
 	rm -rf ${CERT_TEST_STATUS_HOME} ${CERT_TEST_OUTPUT}
 fi
-mkdir -p ${CERT_TEST_STATUS_HOME} ${CERT_TEST_OUTPUT}
+mkdir -p ${CERT_TEST_STATUS_HOME} ${CERT_TEST_OUTPUT} ${CERT_LOG_HOME}
 
 y=0
 for tst_name in $(ls $CERT_HOME)
@@ -22,59 +29,72 @@ do
 	if [ "${tst_name}" == "cert" ]; then # Skip the cert/ directory
 		continue;
 	fi
-	TST=${CERT_HOME}/${tst_name}/test # Run each active test
-	TST_START=${CERT_HOME}/${tst_name}/.autostart # Remove .autostart file from a test directory to skip it
+	TST=${CERT_HOME}/${tst_name}/test
+	TST_START=${CERT_HOME}/${tst_name}/.autostart
 	if [[ -e ${TST} ]]; then
 		if [[ -e ${TST_START} ]]; then
-			echo "*@@@@@   Run ${tst_name} test   @@@@@"
+			log_verbose "Starting: ${tst_name}"
 			TEST_ARR[${y}]=${tst_name}
 			y=$((y + 1))
-            if [[ -v $DEBUG ]]; then
-                bash -e "${TST}" "${CERT_INCLUDE_DIR}" "${tst_name}" &
-            else
-    			${TST} ${CERT_INCLUDE_DIR} ${tst_name} &
-            fi
-			sleep 3
+			# Redirect test output to log files
+			if [[ -v DEBUG ]]; then
+				bash -e "${TST}" "${CERT_INCLUDE_DIR}" "${tst_name}" >> ${CERT_LOG_HOME}/${tst_name}.log 2>&1 &
+			else
+				${TST} ${CERT_INCLUDE_DIR} ${tst_name} >> ${CERT_LOG_HOME}/${tst_name}.log 2>&1 &
+			fi
+			sleep 1
 		else
-			echo "*@@@@@   Skip ${tst_name} test   @@@@@"
+			log_verbose "Skipped: ${tst_name}"
 		fi
 	fi
 done
 
-#set -x
-for led in /sys/class/leds/*/brightness; do echo 0 > "$led"; done # reset_leds
+# Reset all LEDs
+for led in /sys/class/leds/*/brightness; do echo 0 > "$led"; done
 
-while [ 1 ]
-do
-    sleep 5
-    for (( i=0; i<${#TEST_ARR[@]}; i++ ));
-    do
-        test_name=${TEST_ARR[${i}]}
-        TEST_STATUS=$(cat ${CERT_TEST_STATUS_HOME}/${test_name}_test.run)
-        echo "sample $test_name"
-        if [ "${TEST_STATUS}" == "1" ]; then
-            if [[ "${system_role}" == "DUT" ]] ; then
-                status_led_1="green"
-                status_led_2="power-blue"
-            else
-                status_led_1="Green_1"
-                status_led_2="Green_2"
-            fi
-        else
-            echo "Error in $test_name"
-            if [[ "${system_role}" == "DUT" ]] ; then
-                status_led_1="red"
-                status_led_2="amber"
-            else
-                status_led_1="Red_1"
-                status_led_2="Red_2"
-            fi
-        fi
-        sleep 0.5
-        set_status_led ${status_led_1} 1
-        set_status_led ${status_led_2} 1
-        sleep 0.5
-        set_status_led ${status_led_1} 0
-        set_status_led ${status_led_2} 0
-    done
+# Track previous state to avoid repetitive error messages
+declare -A prev_state
+
+while true; do
+	sleep 5
+	for (( i=0; i<${#TEST_ARR[@]}; i++ )); do
+		test_name=${TEST_ARR[${i}]}
+		test_run_file=${CERT_TEST_STATUS_HOME}/${test_name}_test.run
+		
+		if [[ -f ${test_run_file} ]]; then
+			TEST_STATUS=$(cat ${test_run_file})
+		else
+			TEST_STATUS=0
+		fi
+		
+		# Only log on state change
+		if [[ "${prev_state[${test_name}]}" != "${TEST_STATUS}" ]]; then
+			if [ "${TEST_STATUS}" == "1" ]; then
+				echo "[$(date '+%H:%M:%S')] ✓ ${test_name} up"
+			else
+				echo "[$(date '+%H:%M:%S')] ${test_name} starting"
+			fi
+			prev_state[${test_name}]=${TEST_STATUS}
+		fi
+		
+		# LED status indication
+		if [ "${TEST_STATUS}" == "1" ]; then
+			if [[ "${system_role}" == "AP" ]] ; then
+				status_led_1="Green_1"
+				status_led_2="Green_2"
+			fi
+		else
+			if [[ "${system_role}" == "AP" ]] ; then
+				status_led_1="Red_1"
+				status_led_2="Red_2"
+			fi
+		fi
+		
+		sleep 0.5
+		set_status_led ${status_led_1} 1
+		set_status_led ${status_led_2} 1
+		sleep 0.5
+		set_status_led ${status_led_1} 0
+		set_status_led ${status_led_2} 0
+	done
 done

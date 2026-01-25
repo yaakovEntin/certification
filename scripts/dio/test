@@ -26,7 +26,7 @@ function dio_test() {
 		for set_val in ${VAL_ARR[@]} ; do
 			gpioset -m time -s 5 0 ${dout}=${set_val} 2>/dev/null &
 			pid=$!
-			sleep 0.2
+			sleep 0.5
 			if ! get_val=$(gpioget 0 ${din} 2>/dev/null); then
 				echo "Warning: Could not read GPIO ${din}"
 			fi
@@ -36,7 +36,7 @@ function dio_test() {
 				echo "DIO test failed: set pin ${GPIO_TO_PIN[$dout]} to ${set_val}, but read pin ${GPIO_TO_PIN[$din]} as ${get_val}"
 				(( errcode |= 1 ))
 			fi
-			sleep 0.5
+			sleep 1
 		done
 	done
 	return ${errcode}

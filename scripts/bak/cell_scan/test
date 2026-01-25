@@ -14,7 +14,6 @@ function detect_modem_port() {
 	local telit_fn990="1bc7:1070"
 	local telit_le910c4="1bc7:1031"
 
-	# Try using mmcli first
 	if command -v mmcli &>/dev/null; then
 		local modem_list=$(mmcli -L)
 		local modem_id=$(echo "${modem_list}" | grep -oP "Modem/\K[0-9]+" | head -1)
@@ -37,26 +36,16 @@ function detect_modem_port() {
 		fi
 	fi
 
-	# Fallback to lsusb
-	local usb_devices=$(lsusb -d ${telit_le910c4} 2>/dev/null || lsusb -d ${telit_fn990} 2>/dev/null || echo "")
-	if [[ -n "${usb_devices}" ]]; then
-		echo "Telit modem detected via lsusb"
-		if [[ -e "/dev/ttyUSB2" ]]; then
-			cell_modem="/dev/ttyUSB2"
-			echo "Using standard Telit AT port: ${cell_modem}"
-		elif ls /dev/ttyUSB* &>/dev/null; then
-			cell_modem="$(ls /dev/ttyUSB* | sort -V | tail -1)"  # Use last ttyUSB port
-			echo "Using highest ttyUSB port: ${cell_modem}"
-		elif ls /dev/ttyACM* &>/dev/null; then
-			cell_modem="$(ls /dev/ttyACM* | head -1)"
-			echo "Using ttyACM port: ${cell_modem}"
-		else
-			echo "Error: No ttyUSB or ttyACM ports found"
-			return 1
-		fi
-	else
-		echo "Using default cell_modem: ${cell_modem}"
-	fi
+    if [[ -e "/dev/ttyUSB2" ]]; then
+        cell_modem="/dev/ttyUSB2"
+        echo "Using standard AT port: ${cell_modem}"
+    elif ls /dev/ttyACM* &>/dev/null; then
+        cell_modem="$(ls /dev/ttyACM* | head -1)"
+        echo "Using ttyACM port: ${cell_modem}"
+    else
+        echo "Error: No ttyUSB or ttyACM ports found"
+        return 1
+    fi
 
 	at_modem="${cell_modem}"
 	echo "AT modem port set to: ${at_modem}"
