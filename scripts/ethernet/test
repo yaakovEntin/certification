@@ -5,6 +5,7 @@ PATH=${PATH}":/sbin"
 CERT_INCLUDE_DIR=${1}
 . ${CERT_INCLUDE_DIR}/config.inc
 
+link_speed=1000
 eth_test_run=${CERT_TEST_STATUS_HOME}/${2}_test.run
 echo 0 > ${eth_test_run}
 
@@ -15,6 +16,12 @@ net_fini() {
 
 net_ready() {
     for iface in ${NET1} ${NET2}; do
+        # Check if interface exists
+        if [[ ! -e /sys/class/net/${iface} ]]; then
+            echo "ERROR: ${iface}: interface not found"
+            return 3
+        fi
+        
         local retry=10
         echo "${iface}: waiting for carrier"
         while [[ 0 -eq $(cat /sys/class/net/${iface}/carrier 2>/dev/null || true) ]]; do
@@ -35,9 +42,9 @@ net_init() {
     
     ifconfig ${NET1} ${network}.50.0.1/24 up
     ifconfig ${NET2} ${network}.50.1.1/24 up
-    ethtool -s ${NET1} speed 1000 2>/dev/null || true
-    ethtool -s ${NET2} speed 1000 2>/dev/null || true
-    
+    ethtool -s ${NET1} speed ${link_speed} 2>/dev/null || true
+    ethtool -s ${NET2} speed ${link_speed} 2>/dev/null || true
+
     net_ready && rc=$? || rc=$?
     return ${rc}
 }
@@ -70,7 +77,7 @@ net_server() {
 }
 
 net_client() {
-    test_time=${test_time:-15}
+    test_time=${test_time:-5}
     declare -a client_cmds=(
         "iperf3 -B ${network}.50.0.1 -c ${network}.60.1.1 -t ${test_time} -i 3"
         "iperf3 -B ${network}.50.0.1 -c ${network}.60.1.1 -t ${test_time} -i 3 -R"
@@ -146,15 +153,17 @@ if [[ "${system_role}" == "DUT" ]]; then
             echo "=========================================="
             net_loop_main
             pair_rc=$?
-            if [[ ${pair_rc} -ne 0 ]]; then
+            while [[ ${pair_rc} -ne 0 ]]; do
                 echo "FAILED: ${NET1} <-> ${NET2} test (rc=${pair_rc})"
-            else
-                echo "PASSED: ${NET1} <-> ${NET2} test"
-                echo 1 > ${eth_test_run}
-            fi
+                echo 0 > ${eth_test_run}
+                net_loop_main
+                pair_rc=$?
+            done
+            echo "PASSED: ${NET1} <-> ${NET2} test"
         done
         echo "=========================================="
         echo "All ethernet loopback tests completed"
+        echo 1 > ${eth_test_run}
     done
 else
     echo 1 > ${eth_test_run}

@@ -11,5 +11,6 @@ killall cat 2>/dev/null
 killall cangen 2>/dev/null
 killall candump 2>/dev/null
 killall obexd 2>/dev/null
+killall bt-obex 2>/dev/null
 killall sleep 2>/dev/null
 #shutdown -c 2>/dev/null
