@@ -1,35 +1,12 @@
-# setup repo
-* install ubuntu to the DUT with compulab user
-* on DUT run:
+* Get AP running
+* connect antennas on DUT
+* run:
 ```
-sudo -i
-cd /opt
-git clone https://github.com/yaakovEntin/certification.git -b edge-ai
-CERT="/opt/certification"
-ln -s ${CERT}/scripts/cert/test.stop /usr/bin/stop # setup test stopper
-AUTOSTART_SCRIPT="${CERT}/scripts/cert/test.autostart"
-cat << eof >> /home/compulab/.profile
-[[ -f $AUTOSTART_SCRIPT ]] && $AUTOSTART_SCRIPT
-eof
-cat /home/compulab/.profile
+bash -e <(curl -sL https://raw.githubusercontent.com/yaakovEntin/certification/refs/heads/edge-ai/scripts/main.sh)
 ```
-## auto login - skip prompts
-`sudo -i`
-### username
-`vi /lib/systemd/system/serial-getty@.service`
-- replace ExecStart with : 
-`ExecStart=-/sbin/agetty -o '-p -- \\u' -a compulab --keep-baud 115200,38400,9600 %I $TERM`
-### password 
-```
-passwd -d compulab
-vi /etc/passwd # add this line to Set UIO=GID=0 :
-```
-`compulab:x:0:0::/home/compulab:/bin/bash`
-hard reset 
-# Setup up for specific interfaces:
-connect antennas
-## Bluetooth :
-on DUT and AP:
+
+# setup Bluetooth
+on AP run:
 ```
 apt update
 apt install bluez-tools
@@ -42,44 +19,15 @@ power on
 discoverable on
 pairable on
 ```
-bind DUT to AP (do for each unit):
-```
-scan on
-pair A0:D3:65:BD:E1:23
-trust A0:D3:65:BD:E1:23
-connect A0:D3:65:BD:E1:23
-```
 if connection was established even for few seconds, binding succeeded
-## Wifi
-`sudo nmcli device wifi connect IOTG-IMX8PLUS-AP password q1w2e3r4 name WifiCon-wlan0 ifname wlan0`
-# set watchdog
-`vi /etc/systemd/system.conf`
-change :
-```
-RuntimeWatchdogSec=5
-WatchdogDevice=watchdog0
-```
-`systemctl daemon-reexec`
-# control
-to stop testing run:
-`stop`
 
-to restart testing press:
-- ctrl+d
+# Management Cheat Sheet
 
-In order to disable a test for next run :
-```
-rm ${CERT}/scripts/scan_cell/.autostart
-```
-ctrl+d
-
-to enable it for next run :
-```
-touch ${CERT}/scripts/scan_cell/.autostart
-```
-ctrl+d
-
-to set modem test that scans networks:
-`ln -snf bak/cell_scan cell`
-to set modem test that only checks that modem's alive:
-`ln -snf bak/cell_alive cell`
+| **Task**              | **Command**                                             |
+| --------------------- | ------------------------------------------------------- |
+| **Stop Testing**      | `stop`                                                  |
+| **Restart Testing**   | Press `Ctrl+D`                                          |
+| **Disable Cell Scan** | `rm /opt/certification/scripts/scan_cell/.autostart`    |
+| **Enable Cell Scan**  | `touch /opt/certification/scripts/scan_cell/.autostart` |
+| **Set: Network Scan** | `ln -snf bak/cell_scan /opt/certification/cell`         |
+| **Set: Alive Check**  | `ln -snf bak/cell_alive /opt/certification/cell`        |
