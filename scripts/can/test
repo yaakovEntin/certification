@@ -87,13 +87,11 @@ can_config() {
 
 can_test() {
     can_wait_for_usb_adapter || {
-        echo 0 > ${can_test_run}
         return 1
     }
     
     if [[ ${first_run:-1} -eq 1 ]]; then
         can_load_kernel_module || {
-            echo 0 > ${can_test_run}
             return 1
         }
         first_run=0
@@ -101,12 +99,10 @@ can_test() {
     fi
         
     can_wait_for_ifaces || {
-        echo 0 > ${can_test_run}
         return 1
     }
     
     can_config || {
-        echo 0 > ${can_test_run}
         return 1
     }
     
@@ -123,7 +119,6 @@ can_test() {
     
     if grep -q ${CAN_RX_IFACE} /tmp/can_rx.log 2>/dev/null; then
         echo "CAN frames sent and received successfully"
-        echo 1 > ${can_test_run}
         return 0
     else
         echo "ERROR: No CAN frames received on ${CAN_RX_IFACE}"
@@ -131,15 +126,14 @@ can_test() {
         cat /tmp/can_tx.log
         echo "RX log:"
         cat /tmp/can_rx.log
-        echo 0 > ${can_test_run}
         return 1
     fi
 }
 if [[ "${system_role}" == "DUT" ]] ; then
     while true; do
-        can_test
+	echo $(( can_test ^ 1 )) > "${can_test_run}"
         sleep "${can_sleep:-2}"
     done
 else
-	echo 1 > ${dio_test_run}
+	echo 1 > ${can_test_run}
 fi

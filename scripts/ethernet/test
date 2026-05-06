@@ -4,10 +4,36 @@ PATH=${PATH}":/sbin"
 
 CERT_INCLUDE_DIR=${1}
 . ${CERT_INCLUDE_DIR}/config.inc
+. ${CERT_INCLUDE_DIR}/helper-func.inc
 
 link_speed=1000
 eth_test_run=${CERT_TEST_STATUS_HOME}/${2}_test.run
 echo 0 > ${eth_test_run}
+
+# Device paths for ethernet interface pairs
+# These paths don't change between boots but the interface names do
+declare -a ETH_DEVPATHS=(
+    "/sys/devices/platform/bus@0/140a0000.pcie/pci0008:00/0008:00:00.0/0008:01:00.0"
+    "/sys/devices/platform/bus@0/141e0000.pcie/pci0007:00/0007:00:00.0/0007:01:00.0/0007:02:04.0/0007:03:00.0"
+    "/sys/devices/platform/bus@0/141e0000.pcie/pci0007:00/0007:00:00.0/0007:01:00.0/0007:02:05.0/0007:04:00.0"
+    "/sys/devices/platform/bus@0/141e0000.pcie/pci0007:00/0007:00:00.0/0007:01:00.0/0007:02:06.0/0007:05:00.0"
+    "/sys/devices/platform/bus@0/140c0000.pcie/pci0009:00/0009:00:00.0/0009:01:00.0"
+    "/sys/devices/platform/bus@0/3610000.usb/usb2/2-3/2-3.3/2-3.3:1.0"
+)
+
+# Discover actual interface names from device paths
+discover_interfaces() {
+    local devpath iface
+    for devpath in "${ETH_DEVPATHS[@]}"; do
+        iface=$(get_iface_from_devpath "$devpath")
+        if [[ $? -eq 0 ]]; then
+            echo "$iface"
+        else
+            echo "ERROR: Failed to discover interface for $devpath" >&2
+            return 1
+        fi
+    done
+}
 
 net_fini() {
     ifconfig ${NET1} down 2>/dev/null || true
@@ -21,7 +47,7 @@ net_ready() {
             echo "ERROR: ${iface}: interface not found"
             return 3
         fi
-        
+
         local retry=10
         echo "${iface}: waiting for carrier"
         while [[ 0 -eq $(cat /sys/class/net/${iface}/carrier 2>/dev/null || true) ]]; do
@@ -39,7 +65,7 @@ net_ready() {
 
 net_init() {
     net_fini
-    
+
     ifconfig ${NET1} ${network}.50.0.1/24 up
     ifconfig ${NET2} ${network}.50.1.1/24 up
     ethtool -s ${NET1} speed ${link_speed} 2>/dev/null || true
@@ -52,19 +78,19 @@ net_init() {
 net_config() {
     # nat source IP ${network}.50.0.1 -> ${network}.60.0.1 when going to ${network}.60.1.1
     iptables -t nat -A POSTROUTING -s ${network}.50.0.1 -d ${network}.60.1.1 -j SNAT --to-source ${network}.60.0.1 2>/dev/null || true
-    
+
     # nat inbound ${network}.60.0.1 -> ${network}.50.0.1
     iptables -t nat -A PREROUTING -d ${network}.60.0.1 -j DNAT --to-destination ${network}.50.0.1 2>/dev/null || true
-    
+
     # nat source IP ${network}.50.1.1 -> ${network}.60.1.1 when going to ${network}.60.0.1
     iptables -t nat -A POSTROUTING -s ${network}.50.1.1 -d ${network}.60.0.1 -j SNAT --to-source ${network}.60.1.1 2>/dev/null || true
-    
+
     # nat inbound ${network}.60.1.1 -> ${network}.50.1.1
     iptables -t nat -A PREROUTING -d ${network}.60.1.1 -j DNAT --to-destination ${network}.50.1.1 2>/dev/null || true
-    
+
     ip route add ${network}.60.1.1 dev ${NET1} 2>/dev/null || true
     arp -i ${NET1} -s ${network}.60.1.1 $(cat /sys/class/net/${NET2}/address)
-    
+
     ip route add ${network}.60.0.1 dev ${NET2} 2>/dev/null || true
     arp -i ${NET2} -s ${network}.60.0.1 $(cat /sys/class/net/${NET1}/address)
 }
@@ -82,7 +108,7 @@ net_client() {
         "iperf3 -B ${network}.50.0.1 -c ${network}.60.1.1 -t ${test_time} -i 3"
         "iperf3 -B ${network}.50.0.1 -c ${network}.60.1.1 -t ${test_time} -i 3 -R"
     )
-    
+
     for cmd_index in ${!client_cmds[@]}; do
         local client_cmd=${client_cmds[${cmd_index}]}
         echo "Starting client [ ${client_cmd} ] ..."
@@ -111,7 +137,7 @@ net_loop_main() {
     [[ -e /sys/class/net/${NET1} ]] && true || return 3
     ERROR_MESSAGE="${NET2} device not found"
     [[ -e /sys/class/net/${NET2} ]] && true || return 4
-    
+
     iperf_log=${LLOGS:-/tmp}/iperf.${NET1}_${NET2}
     network=${network:-10}
 
@@ -135,13 +161,24 @@ net_loop_main() {
     return ${rc}
 }
 
-echo "Starting ethernet loopback tests for pairs: eth0-1, eth2-3, eth4-5"
+echo "Starting ethernet tests"
 echo 0 > ${eth_test_run}
 
+# Build eth_pairs from discovered interfaces
+# Pairs: (0,1), (2,3), (4,5)
+declare -a discovered_ifaces
+mapfile -t discovered_ifaces < <(discover_interfaces)
+
+if [[ ${#discovered_ifaces[@]} -lt 6 ]]; then
+    echo "ERROR: Expected at least 6 interfaces, found ${#discovered_ifaces[@]}"
+    echo 0 > ${eth_test_run}
+    exit 1
+fi
+
 declare -a eth_pairs=(
-    "eth0 eth1"
-    "eth2 eth3"
-    "eth4 eth5"
+    "${discovered_ifaces[0]} ${discovered_ifaces[1]}"
+    "${discovered_ifaces[2]} ${discovered_ifaces[3]}"
+    "${discovered_ifaces[4]} ${discovered_ifaces[5]}"
 )
 
 if [[ "${system_role}" == "DUT" ]]; then
@@ -150,19 +187,10 @@ if [[ "${system_role}" == "DUT" ]]; then
             NET1=$(echo ${pair} | awk '{print $1}')
             NET2=$(echo ${pair} | awk '{print $2}')
             export NET1 NET2
-            echo "=========================================="
-            net_loop_main
-            pair_rc=$?
-            while [[ ${pair_rc} -ne 0 ]]; do
-                echo "FAILED: ${NET1} <-> ${NET2} test (rc=${pair_rc})"
-                echo 0 > ${eth_test_run}
-                net_loop_main
-                pair_rc=$?
-            done
-            echo "PASSED: ${NET1} <-> ${NET2} test"
+            do_until_success net_loop_main "${NET1} <-> ${NET2} loopback test"
         done
         echo "=========================================="
-        echo "All ethernet loopback tests completed"
+        echo "All ethernet tests completed"
         echo 1 > ${eth_test_run}
     done
 else

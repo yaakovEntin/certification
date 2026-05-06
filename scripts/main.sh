@@ -23,23 +23,9 @@ sed -i 's/.*RuntimeWatchdogSec=.*/RuntimeWatchdogSec=5/' $WDOG_CONF
 sed -i 's/.*WatchdogDevice=.*/WatchdogDevice=watchdog0/' $WDOG_CONF
 systemctl daemon-reexec
 
-# 3. Hardware Interfaces
-apt update && apt install -y bluez-tools bluez-obexd
-
-# Wifi Setup
-nmcli device wifi connect IOTG-IMX8PLUS-AP password q1w2e3r4 name WifiCon-wlan0 ifname wlan0
-
-# Bluetooth Setup (Non-interactive)
-bluetoothctl power on
-bluetoothctl discoverable on
-bluetoothctl pairable on
-
-# Bind to AP - Replace MAC if different for specific units
-AP_MAC="A0:D3:65:BD:E1:23"
-bluetoothctl scan on &
-sleep 5
-bluetoothctl pair $AP_MAC
-bluetoothctl trust $AP_MAC
-bluetoothctl connect $AP_MAC
-
-echo "Setup complete. Perform a hard reset."
+echo "Setup complete"
+echo "Read each test's README for connections instructions:"
+find $CERT/scripts -name README.md
+echo "Run each test's init.sh to initialize it:"
+find $CERT/scripts -name init.sh
+echo "After that Perform a hard reset to start testing automatically."

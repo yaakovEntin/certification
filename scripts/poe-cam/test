@@ -1,0 +1,53 @@
+#!/bin/bash
+
+PATH=${PATH}":/sbin"
+
+CERT_INCLUDE_DIR=${1}
+. ${CERT_INCLUDE_DIR}/config.inc
+. ${CERT_INCLUDE_DIR}/helper-func.inc
+
+poe_test_run=${CERT_TEST_STATUS_HOME}/${2}_test.run
+echo 0 > ${poe_test_run}
+
+# Device path for PoE camera interface
+POE_CAM_DEVPATH="/sys/devices/platform/bus@0/141e0000.pcie/pci0007:00/0007:00:00.0/0007:01:00.0/0007:02:07.0/0007:06:00.0"
+net_ping_camera() {
+    local camera_ip=10.123.45.100
+    local local_ip=10.123.45.101/24
+    local iface
+
+    # Discover the actual interface name for the PoE camera device
+    iface=$(get_iface_from_devpath "$POE_CAM_DEVPATH")
+    if [[ $? -ne 0 ]]; then
+        echo "ERROR: Failed to discover PoE camera interface"
+        return 1
+    fi
+
+    if [[ ! -e /sys/class/net/${iface} ]]; then
+        echo "ERROR: ${iface}: interface not found"
+        return 3
+    fi
+    if ! ip addr show dev ${iface} | grep -q "${local_ip}"; then
+        ip addr add ${local_ip} dev ${iface} 2>/dev/null || true
+    fi
+    ip link set ${iface} up 2>/dev/null || true
+    sleep 1
+    echo "Pinging IP camera ${camera_ip} via ${iface}..."
+    ping -c 4 -I ${iface} ${camera_ip}
+    local rc=$?
+    ip addr del ${local_ip} dev ${iface} 2>/dev/null || true
+    return ${rc}
+}
+
+echo 0 > ${poe_test_run}
+
+if [[ "${system_role}" == "DUT" ]]; then
+    while true; do
+        do_until_success net_ping_camera "IP camera ping test"
+        echo "=========================================="
+        echo "All ethernet tests completed"
+        echo 1 > ${poe_test_run}
+    done
+else
+    echo 1 > ${poe_test_run}
+fi

@@ -7,7 +7,7 @@ if [[ -v $DEBUG ]] ; then
     trap 'echo "Error: $BASH_SOURCE +$LINENO: command [$BASH_COMMAND] failed with exit code $?" >&2' ERR
 fi
 
-[[ $(hostname) == ubuntu ]] && system_role="DUT" || system_role="AP"
+[[ $(hostname) == ubuntu || $(hostname) == compulab-desktop ]] && system_role="DUT" || system_role="AP"
 echo "System role: $system_role"
 
 # Common defines

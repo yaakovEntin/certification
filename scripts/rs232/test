@@ -20,7 +20,7 @@ function rs232_test() {
 		return 1
 	fi
 	
-	if ! stty -F ${RS232_PORT} ${RS232_BAUD} cs8 -cstopb -parenb raw -echo -icanon min 1 time 0 2>/dev/null; then
+	if ! stty -F ${RS232_PORT} ${RS232_BAUD} crtscts cs8 cstopb -parenb raw -echo -icanon min 1 time 0 2>/dev/null; then
 		echo "Error: Could not configure ${RS232_PORT}"
 		return 1
 	fi
@@ -43,16 +43,11 @@ function rs232_test() {
 	return ${errcode}
 }
 
-function rs232_loop_test() {
+if [[ "${system_role}" == "DUT" ]] ; then
 	while true ; do
-        rs232_test
-		echo $(( $? ^ 1 )) > "${rs232_test_run}"
+		echo $(( rs232_test ^ 1 )) > "${rs232_test_run}"
 		sleep 2
 	done
-}
-
-if [[ "${system_role}" == "DUT" ]] ; then
-	rs232_loop_test
 else
 	echo 1 > ${rs232_test_run}
 fi

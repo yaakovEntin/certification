@@ -12,12 +12,6 @@ echo 0 > ${dio_test_run}
 function dio_test() {
 	declare -a DIO_ARR=( "85 105" "43 106" )
 	declare -A GPIO_TO_PIN=( [85]=1 [105]=4 [43]=3 [106]=6 )
-	# pin | cmd   		    | connection to pin
-	# --- | --------------- | -----------------
-	# 1   | gpioget 0 85    | 4
-	# 3   | gpioget 0 43    | 6
-	# 4   | gpioset 0 105=1 | 1
-	# 6   | gpioset 0 106=1 | 3
 	declare -a VAL_ARR=(0 1)
 	local get_val=0
 	local errcode=0

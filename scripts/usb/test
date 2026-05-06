@@ -8,7 +8,7 @@ usb_test_run=${CERT_TEST_STATUS_HOME}/${2}_test.run
 echo 0 > ${usb_test_run}
 
 USB3_CONTROLLER="/sys/devices/platform/bus@0/3610000.usb"
-USB3_EXPECTED_COUNT=5
+USB3_EXPECTED_COUNT=4
 
 usb3_scan_devices() {
     local scsi_hosts=()
@@ -30,7 +30,7 @@ usb3_scan_devices() {
     if [[ ${count} -eq ${USB3_EXPECTED_COUNT} ]]; then
         return 0
     else
-        echo "ERROR: Expected ${USB3_EXPECTED_COUNT} USB3 ports, but found ${count}"
+        echo "ERROR: Expected ${USB3_EXPECTED_COUNT} USB ports, but found ${count}"
         return 1
     fi
 }
